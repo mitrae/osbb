@@ -1,0 +1,14 @@
+# IDE
+.idea/
+
+# API
+/api/vendor/
+/api/var/
+/api/.env.local
+/api/config/jwt/*.pem
+
+# Frontend
+/frontend/node_modules/
+/frontend/.nuxt/
+/frontend/.output/
+/frontend/dist/
