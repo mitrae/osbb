@@ -2,6 +2,8 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
@@ -18,11 +20,12 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ORM\Entity]
 #[ORM\Table(name: '`request`')]
 #[ORM\HasLifecycleCallbacks]
+#[ApiFilter(SearchFilter::class, properties: ['status' => 'exact'])]
 #[ApiResource(
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ORG_ROLE_RESIDENT')", processor: RequestProcessor::class),
+        new Post(security: "is_granted('ORG_MEMBER')", processor: RequestProcessor::class),
         new Patch(security: "is_granted('ORG_ROLE_ADMIN')"),
         new Delete(security: "is_granted('ROLE_ADMIN')"),
     ],

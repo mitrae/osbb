@@ -17,7 +17,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ORG_ROLE_RESIDENT')", processor: RequestCommentProcessor::class),
+        new Post(security: "is_granted('ORG_MEMBER')", processor: RequestCommentProcessor::class),
         new Delete(security: "is_granted('ORG_ROLE_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['comment:read']],

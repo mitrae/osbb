@@ -7,10 +7,6 @@ security:
             entity:
                 class: App\Entity\User
                 property: email
-        admin_provider:
-            entity:
-                class: App\Entity\Admin
-                property: email
         jwt_provider:
             id: App\Security\TypeAwareUserProvider
 
@@ -18,16 +14,6 @@ security:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
-        admin_login:
-            pattern: ^/api/admin/login$
-            stateless: true
-            provider: admin_provider
-            json_login:
-                check_path: /api/admin/login
-                username_path: email
-                password_path: password
-                success_handler: lexik_jwt_authentication.handler.authentication_success
-                failure_handler: lexik_jwt_authentication.handler.authentication_failure
         login:
             pattern: ^/api/login$
             stateless: true
@@ -48,10 +34,10 @@ security:
         ROLE_RESIDENT: ROLE_USER
         ROLE_MANAGER: ROLE_RESIDENT
         ROLE_ADMIN: ROLE_MANAGER
+        ROLE_PLATFORM_ADMIN: [ROLE_ADMIN]
 
     access_control:
         - { path: ^/api/docs, roles: PUBLIC_ACCESS }
-        - { path: ^/api/admin/login, roles: PUBLIC_ACCESS }
         - { path: ^/api/login, roles: PUBLIC_ACCESS }
         - { path: ^/api/register, roles: PUBLIC_ACCESS }
         - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }

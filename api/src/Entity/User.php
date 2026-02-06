@@ -37,13 +37,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['user:read', 'request:read', 'survey:read', 'vote:read', 'membership:read', 'comment:read'])]
+    #[Groups(['user:read', 'request:read', 'survey:read', 'vote:read', 'membership:read', 'comment:read', 'resident:read', 'connection_request:read'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 180, unique: true)]
     #[Assert\Email]
     #[Assert\NotBlank]
-    #[Groups(['user:read', 'user:write', 'request:read', 'membership:read', 'comment:read'])]
+    #[Groups(['user:read', 'user:write', 'request:read', 'membership:read', 'comment:read', 'resident:read', 'connection_request:read'])]
     private ?string $email = null;
 
     #[ORM\Column]
@@ -69,18 +69,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'json')]
     #[Groups(['user:read'])]
     private array $roles = ['ROLE_USER'];
-
-    #[ORM\ManyToOne(targetEntity: Organization::class, inversedBy: 'users')]
-    #[Groups(['user:read', 'user:write'])]
-    private ?Organization $organization = null;
-
-    #[ORM\ManyToOne(targetEntity: Building::class, inversedBy: 'users')]
-    #[Groups(['user:read', 'user:write'])]
-    private ?Building $building = null;
-
-    #[ORM\Column(length: 20, nullable: true)]
-    #[Groups(['user:read', 'user:write'])]
-    private ?string $apartment = null;
 
     #[ORM\Column]
     #[Groups(['user:read'])]
@@ -113,7 +101,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     public function getUserIdentifier(): string
     {
-        return 'user:' . $this->email;
+        return $this->email;
     }
 
     public function getRoles(): array
@@ -189,39 +177,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    public function getOrganization(): ?Organization
-    {
-        return $this->organization;
-    }
-
-    public function setOrganization(?Organization $organization): static
-    {
-        $this->organization = $organization;
-        return $this;
-    }
-
-    public function getBuilding(): ?Building
-    {
-        return $this->building;
-    }
-
-    public function setBuilding(?Building $building): static
-    {
-        $this->building = $building;
-        return $this;
-    }
-
-    public function getApartment(): ?string
-    {
-        return $this->apartment;
-    }
-
-    public function setApartment(?string $apartment): static
-    {
-        $this->apartment = $apartment;
-        return $this;
-    }
-
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;
@@ -230,5 +185,10 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function getMemberships(): Collection
     {
         return $this->memberships;
+    }
+
+    public function isPlatformAdmin(): bool
+    {
+        return in_array('ROLE_PLATFORM_ADMIN', $this->getRoles());
     }
 }

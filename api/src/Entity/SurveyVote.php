@@ -19,7 +19,7 @@ use Symfony\Component\Serializer\Annotation\Groups;
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ORG_ROLE_RESIDENT')", processor: VoteProcessor::class),
+        new Post(security: "is_granted('ORG_MEMBER')", processor: VoteProcessor::class),
         new Delete(security: "is_granted('ROLE_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['vote:read']],

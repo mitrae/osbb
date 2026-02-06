@@ -6,7 +6,7 @@ export default defineNuxtPlugin(async () => {
   org.restore();
 
   // If authenticated, load memberships
-  if (auth.isAuthenticated && auth.user?.type === 'user') {
+  if (auth.isAuthenticated) {
     await org.loadMemberships();
   }
 });

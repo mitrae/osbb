@@ -18,9 +18,9 @@ use Symfony\Component\Serializer\Annotation\Groups;
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ROLE_ADMIN')"),
-        new Patch(security: "is_granted('ROLE_ADMIN')"),
-        new Delete(security: "is_granted('ROLE_ADMIN')"),
+        new Post(security: "is_granted('ROLE_PLATFORM_ADMIN')"),
+        new Patch(security: "is_granted('ROLE_PLATFORM_ADMIN') or is_granted('ORG_ROLE_ADMIN')"),
+        new Delete(security: "is_granted('ROLE_PLATFORM_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['organization:read']],
     denormalizationContext: ['groups' => ['organization:write']],
@@ -30,12 +30,16 @@ class Organization
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['organization:read', 'building:read', 'user:read', 'request:read', 'survey:read', 'membership:read'])]
+    #[Groups(['organization:read', 'building:read', 'user:read', 'request:read', 'survey:read', 'membership:read', 'connection_request:read'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['organization:read', 'organization:write', 'building:read', 'user:read', 'membership:read'])]
+    #[Groups(['organization:read', 'organization:write', 'building:read', 'user:read', 'request:read', 'survey:read', 'membership:read', 'connection_request:read'])]
     private ?string $name = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    #[Groups(['organization:read', 'organization:write', 'membership:read'])]
+    private ?string $city = null;
 
     #[ORM\Column(length: 500)]
     #[Groups(['organization:read', 'organization:write', 'membership:read'])]
@@ -48,16 +52,12 @@ class Organization
     #[ORM\OneToMany(mappedBy: 'organization', targetEntity: Building::class)]
     private Collection $buildings;
 
-    #[ORM\OneToMany(mappedBy: 'organization', targetEntity: User::class)]
-    private Collection $users;
-
     #[ORM\OneToMany(mappedBy: 'organization', targetEntity: OrganizationMembership::class)]
     private Collection $memberships;
 
     public function __construct()
     {
         $this->buildings = new ArrayCollection();
-        $this->users = new ArrayCollection();
         $this->memberships = new ArrayCollection();
         $this->createdAt = new \DateTimeImmutable();
     }
@@ -75,6 +75,17 @@ class Organization
     public function setName(string $name): static
     {
         $this->name = $name;
+        return $this;
+    }
+
+    public function getCity(): ?string
+    {
+        return $this->city;
+    }
+
+    public function setCity(?string $city): static
+    {
+        $this->city = $city;
         return $this;
     }
 
@@ -97,11 +108,6 @@ class Organization
     public function getBuildings(): Collection
     {
         return $this->buildings;
-    }
-
-    public function getUsers(): Collection
-    {
-        return $this->users;
     }
 
     public function getMemberships(): Collection

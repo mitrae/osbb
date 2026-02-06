@@ -6,7 +6,7 @@ export const useApi = () => {
   const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Accept: 'application/json',
+      Accept: 'application/ld+json',
       ...(options.headers as Record<string, string> || {}),
     };
 

@@ -2,7 +2,6 @@
 
 namespace App\EventListener;
 
-use App\Entity\Admin;
 use App\Entity\User;
 use Lexik\Bundle\JWTAuthenticationBundle\Event\JWTCreatedEvent;
 
@@ -17,10 +16,7 @@ class JWTCreatedListener
             $payload['id'] = $user->getId();
             $payload['firstName'] = $user->getFirstName();
             $payload['lastName'] = $user->getLastName();
-            $payload['type'] = 'user';
-        } elseif ($user instanceof Admin) {
-            $payload['id'] = $user->getId();
-            $payload['type'] = 'admin';
+            $payload['isPlatformAdmin'] = $user->isPlatformAdmin();
         }
 
         $event->setData($payload);

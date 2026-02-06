@@ -5,8 +5,8 @@ namespace App\State;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\State\ProcessorInterface;
-use App\Entity\ApartmentOwnership;
 use App\Entity\OrganizationMembership;
+use App\Entity\Resident;
 use App\Entity\SurveyVote;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,27 +31,39 @@ final class VoteProcessor implements ProcessorInterface
             }
             $data->setUser($user);
 
-            // Validate user is an approved member of the survey's org
+            // Validate user is a member of the survey's org (via membership or resident link)
             $survey = $data->getQuestion()?->getSurvey();
             $organization = $survey?->getOrganization();
 
             if ($organization) {
-                $membership = $this->em->getRepository(OrganizationMembership::class)->findOneBy([
+                $hasMembership = $this->em->getRepository(OrganizationMembership::class)->findOneBy([
                     'user' => $user,
                     'organization' => $organization,
-                    'status' => OrganizationMembership::STATUS_APPROVED,
                 ]);
-                if (!$membership) {
-                    throw new AccessDeniedHttpException('You are not an approved member of this organization.');
+
+                $hasResident = $this->em->createQueryBuilder()
+                    ->select('COUNT(r.id)')
+                    ->from(Resident::class, 'r')
+                    ->join('r.apartment', 'a')
+                    ->join('a.building', 'b')
+                    ->where('r.user = :user')
+                    ->andWhere('b.organization = :org')
+                    ->setParameter('user', $user)
+                    ->setParameter('org', $organization)
+                    ->getQuery()
+                    ->getSingleScalarResult();
+
+                if (!$hasMembership && $hasResident == 0) {
+                    throw new AccessDeniedHttpException('You are not a member of this organization.');
                 }
 
-                // Calculate weight: SUM of owned_area from user's apartments in org's buildings
+                // Calculate weight from Resident.ownedArea
                 $weight = $this->em->createQueryBuilder()
-                    ->select('SUM(ao.ownedArea)')
-                    ->from(ApartmentOwnership::class, 'ao')
-                    ->join('ao.apartment', 'a')
+                    ->select('SUM(r.ownedArea)')
+                    ->from(Resident::class, 'r')
+                    ->join('r.apartment', 'a')
                     ->join('a.building', 'b')
-                    ->where('ao.user = :user')
+                    ->where('r.user = :user')
                     ->andWhere('b.organization = :org')
                     ->setParameter('user', $user)
                     ->setParameter('org', $organization)

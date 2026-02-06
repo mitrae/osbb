@@ -6,12 +6,12 @@ use ApiPlatform\Doctrine\Orm\Extension\QueryCollectionExtensionInterface;
 use ApiPlatform\Doctrine\Orm\Extension\QueryItemExtensionInterface;
 use ApiPlatform\Doctrine\Orm\Util\QueryNameGeneratorInterface;
 use ApiPlatform\Metadata\Operation;
-use App\Entity\Admin;
 use App\Entity\Apartment;
-use App\Entity\ApartmentOwnership;
 use App\Entity\Building;
+use App\Entity\ConnectionRequest;
 use App\Entity\OrganizationMembership;
 use App\Entity\Request;
+use App\Entity\Resident;
 use App\Entity\Survey;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
@@ -41,32 +41,33 @@ class OrganizationFilterExtension implements QueryCollectionExtensionInterface, 
 
     public function applyToItem(QueryBuilder $queryBuilder, QueryNameGeneratorInterface $queryNameGenerator, string $resourceClass, array $identifiers, ?Operation $operation = null, array $context = []): void
     {
-        $this->addWhere($queryBuilder, $resourceClass);
+        $this->addWhere($queryBuilder, $resourceClass, isItem: true);
     }
 
-    private function addWhere(QueryBuilder $queryBuilder, string $resourceClass): void
+    private function addWhere(QueryBuilder $queryBuilder, string $resourceClass, bool $isItem = false): void
     {
         $user = $this->security->getUser();
-
-        // Platform admins bypass all filters
-        if ($user instanceof Admin) {
-            return;
-        }
+        $isPlatformAdmin = $user instanceof User && $user->isPlatformAdmin();
 
         $orgId = $this->getOrganizationId();
 
-        // Filter OrganizationMembership — users see own or org admin sees all for their org
+        // Filter OrganizationMembership
         if ($resourceClass === OrganizationMembership::class) {
             if ($user instanceof User) {
-                $this->filterMemberships($queryBuilder, $user, $orgId);
+                $this->filterMemberships($queryBuilder, $user, $orgId, $isPlatformAdmin);
             }
             return;
         }
 
-        // Apartment: filter via building.organization
+        // Apartment: filter via building.organization (skip for item lookups to allow IRI denormalization)
         if ($resourceClass === Apartment::class) {
+            if ($isItem) {
+                return;
+            }
             if (!$orgId) {
-                $queryBuilder->andWhere('1 = 0');
+                if (!$isPlatformAdmin) {
+                    $queryBuilder->andWhere('1 = 0');
+                }
                 return;
             }
             $rootAlias = $queryBuilder->getRootAliases()[0];
@@ -76,27 +77,46 @@ class OrganizationFilterExtension implements QueryCollectionExtensionInterface, 
             return;
         }
 
-        // ApartmentOwnership: filter via apartment.building.organization
-        if ($resourceClass === ApartmentOwnership::class) {
+        // Resident: filter via apartment.building.organization (skip for item lookups to allow IRI denormalization)
+        if ($resourceClass === Resident::class) {
+            if ($isItem) {
+                return;
+            }
             if (!$orgId) {
-                $queryBuilder->andWhere('1 = 0');
+                if (!$isPlatformAdmin) {
+                    $queryBuilder->andWhere('1 = 0');
+                }
                 return;
             }
             $rootAlias = $queryBuilder->getRootAliases()[0];
-            $queryBuilder->join(sprintf('%s.apartment', $rootAlias), 'own_a')
-                ->join('own_a.building', 'own_b')
-                ->andWhere('own_b.organization = :org_filter_id')
+            $queryBuilder->join(sprintf('%s.apartment', $rootAlias), 'res_a')
+                ->join('res_a.building', 'res_b')
+                ->andWhere('res_b.organization = :org_filter_id')
                 ->setParameter('org_filter_id', $orgId);
             return;
         }
 
-        // For org-filtered entities, require org context
+        // ConnectionRequest
+        if ($resourceClass === ConnectionRequest::class) {
+            if ($user instanceof User) {
+                $this->filterConnectionRequests($queryBuilder, $user, $orgId, $isPlatformAdmin);
+            }
+            return;
+        }
+
+        // For org-filtered entities, require org context (skip for item lookups on Building to allow IRI denormalization)
         if (!in_array($resourceClass, self::ORG_FILTERED_ENTITIES)) {
             return;
         }
 
+        if ($isItem) {
+            return;
+        }
+
         if (!$orgId) {
-            $queryBuilder->andWhere('1 = 0');
+            if (!$isPlatformAdmin) {
+                $queryBuilder->andWhere('1 = 0');
+            }
             return;
         }
 
@@ -105,16 +125,21 @@ class OrganizationFilterExtension implements QueryCollectionExtensionInterface, 
             ->setParameter('org_filter_id', $orgId);
     }
 
-    private function filterMemberships(QueryBuilder $queryBuilder, User $user, ?int $orgId): void
+    private function filterMemberships(QueryBuilder $queryBuilder, User $user, ?int $orgId, bool $isPlatformAdmin): void
     {
         $rootAlias = $queryBuilder->getRootAliases()[0];
 
-        // If org context present, check if user is org admin — they see all memberships for that org
+        // If org context present, platform admin or org admin sees all memberships for that org
         if ($orgId) {
+            if ($isPlatformAdmin) {
+                $queryBuilder->andWhere(sprintf('%s.organization = :org_filter_id', $rootAlias))
+                    ->setParameter('org_filter_id', $orgId);
+                return;
+            }
+
             $adminMembership = $this->em->getRepository(OrganizationMembership::class)->findOneBy([
                 'user' => $user,
                 'organization' => $orgId,
-                'status' => OrganizationMembership::STATUS_APPROVED,
                 'role' => OrganizationMembership::ROLE_ADMIN,
             ]);
 
@@ -125,7 +150,47 @@ class OrganizationFilterExtension implements QueryCollectionExtensionInterface, 
             }
         }
 
+        // Platform admin without org context sees all memberships
+        if ($isPlatformAdmin) {
+            return;
+        }
+
         // Otherwise, users only see their own memberships
+        $queryBuilder->andWhere(sprintf('%s.user = :current_user_id', $rootAlias))
+            ->setParameter('current_user_id', $user->getId());
+    }
+
+    private function filterConnectionRequests(QueryBuilder $queryBuilder, User $user, ?int $orgId, bool $isPlatformAdmin): void
+    {
+        $rootAlias = $queryBuilder->getRootAliases()[0];
+
+        // If org context present, platform admin or org admin sees all requests for that org
+        if ($orgId) {
+            if ($isPlatformAdmin) {
+                $queryBuilder->andWhere(sprintf('%s.organization = :org_filter_id', $rootAlias))
+                    ->setParameter('org_filter_id', $orgId);
+                return;
+            }
+
+            $adminMembership = $this->em->getRepository(OrganizationMembership::class)->findOneBy([
+                'user' => $user,
+                'organization' => $orgId,
+                'role' => OrganizationMembership::ROLE_ADMIN,
+            ]);
+
+            if ($adminMembership) {
+                $queryBuilder->andWhere(sprintf('%s.organization = :org_filter_id', $rootAlias))
+                    ->setParameter('org_filter_id', $orgId);
+                return;
+            }
+        }
+
+        // Platform admin without org context sees all connection requests
+        if ($isPlatformAdmin) {
+            return;
+        }
+
+        // Otherwise, users only see their own connection requests
         $queryBuilder->andWhere(sprintf('%s.user = :current_user_id', $rootAlias))
             ->setParameter('current_user_id', $user->getId());
     }

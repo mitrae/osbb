@@ -1,35 +1,23 @@
 <template>
   <div class="app">
-    <nav v-if="auth.isAuthenticated" class="navbar">
-      <div class="navbar-brand">
-        <NuxtLink to="/">OSBB Portal</NuxtLink>
-      </div>
-      <div class="navbar-menu">
-        <NuxtLink to="/">Dashboard</NuxtLink>
-        <NuxtLink to="/requests">Requests</NuxtLink>
-        <NuxtLink to="/surveys">Surveys</NuxtLink>
-        <NuxtLink to="/organizations">Organizations</NuxtLink>
-      </div>
-      <div class="navbar-end">
-        <select
-          v-if="auth.user?.type === 'user' && org.approvedMemberships.length > 0"
-          class="org-selector"
-          :value="org.currentOrgId || ''"
-          @change="switchOrg(($event.target as HTMLSelectElement).value)"
-        >
-          <option value="" disabled>Select organization</option>
-          <option
-            v-for="m in org.approvedMemberships"
-            :key="m.organization.id"
-            :value="m.organization.id"
-          >
-            {{ m.organization.name || `Org #${m.organization.id}` }}
-          </option>
-        </select>
-        <span class="user-name">{{ auth.user?.type === 'admin' ? auth.user?.email : `${auth.user?.firstName} ${auth.user?.lastName}` }}</span>
-        <button class="btn btn-sm" @click="auth.logout()">Logout</button>
-      </div>
-    </nav>
+    <ClientOnly>
+      <nav v-if="auth.isAuthenticated" class="navbar">
+        <div class="navbar-brand">
+          <NuxtLink to="/">OSBB Portal</NuxtLink>
+        </div>
+        <div class="navbar-menu">
+          <NuxtLink to="/">Dashboard</NuxtLink>
+          <NuxtLink to="/requests">Requests</NuxtLink>
+          <NuxtLink to="/surveys">Surveys</NuxtLink>
+          <NuxtLink to="/organizations">Organizations</NuxtLink>
+        </div>
+        <div class="navbar-end">
+          <NuxtLink to="/profile" class="user-name">{{ `${auth.user?.firstName} ${auth.user?.lastName}` }}</NuxtLink>
+          <span class="role-badge" :class="'role-' + roleKey">{{ roleLabel }}</span>
+          <button class="btn btn-sm" @click="auth.logout()">Logout</button>
+        </div>
+      </nav>
+    </ClientOnly>
     <main class="container">
       <slot />
     </main>
@@ -40,13 +28,27 @@
 const auth = useAuthStore();
 const org = useOrganizationStore();
 
-function switchOrg(value: string) {
-  if (value) {
-    org.setCurrentOrg(parseInt(value));
-    // Refresh the current page to reload data with new org context
-    navigateTo(useRoute().fullPath);
-  }
-}
+const roleLabel = computed(() => {
+  if (auth.isPlatformAdmin) return 'Platform Admin';
+  const role = org.currentMembership?.role;
+  if (role === 'ROLE_ADMIN') return 'Admin';
+  if (role === 'ROLE_MANAGER') return 'Manager';
+  // Check if user is a resident (has resident-linked org)
+  const currentOrgInResidents = org.residentOrgs.some((r) => r.orgId === org.currentOrgId);
+  if (currentOrgInResidents) return 'Resident';
+  return 'User';
+});
+
+const roleKey = computed(() => {
+  if (auth.isPlatformAdmin) return 'super';
+  const role = org.currentMembership?.role;
+  if (role === 'ROLE_ADMIN') return 'admin';
+  if (role === 'ROLE_MANAGER') return 'manager';
+  const currentOrgInResidents = org.residentOrgs.some((r) => r.orgId === org.currentOrgId);
+  if (currentOrgInResidents) return 'resident';
+  return 'user';
+});
+
 </script>
 
 <style>
@@ -106,25 +108,30 @@ body {
   gap: 1rem;
 }
 
-.org-selector {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  padding: 0.3rem 0.5rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.org-selector option {
-  color: #333;
-  background: white;
-}
-
 .user-name {
   font-size: 0.9rem;
   opacity: 0.9;
+  color: white;
+  text-decoration: none;
 }
+.user-name:hover {
+  text-decoration: underline;
+}
+
+.role-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.role-super { background: #ff6f00; color: white; }
+.role-admin { background: #d32f2f; color: white; }
+.role-manager { background: #7b1fa2; color: white; }
+.role-resident { background: #2e7d32; color: white; }
+.role-user { background: rgba(255, 255, 255, 0.25); color: white; }
 
 .container {
   max-width: 1000px;

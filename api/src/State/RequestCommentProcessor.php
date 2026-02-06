@@ -7,6 +7,7 @@ use ApiPlatform\Metadata\Post;
 use ApiPlatform\State\ProcessorInterface;
 use App\Entity\OrganizationMembership;
 use App\Entity\RequestComment;
+use App\Entity\Resident;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -30,7 +31,7 @@ final class RequestCommentProcessor implements ProcessorInterface
             }
             $data->setAuthor($user);
 
-            // Validate: user must be request author or org member
+            // Validate: user must be request author or org member (via membership or resident)
             $request = $data->getRequest();
             $organization = $request?->getOrganization();
 
@@ -38,10 +39,25 @@ final class RequestCommentProcessor implements ProcessorInterface
                 $membership = $this->em->getRepository(OrganizationMembership::class)->findOneBy([
                     'user' => $user,
                     'organization' => $organization,
-                    'status' => OrganizationMembership::STATUS_APPROVED,
                 ]);
+
                 if (!$membership) {
-                    throw new AccessDeniedHttpException('You are not an approved member of this organization.');
+                    // Check resident link
+                    $count = $this->em->createQueryBuilder()
+                        ->select('COUNT(r.id)')
+                        ->from(Resident::class, 'r')
+                        ->join('r.apartment', 'a')
+                        ->join('a.building', 'b')
+                        ->where('r.user = :user')
+                        ->andWhere('b.organization = :org')
+                        ->setParameter('user', $user)
+                        ->setParameter('org', $organization)
+                        ->getQuery()
+                        ->getSingleScalarResult();
+
+                    if ($count == 0) {
+                        throw new AccessDeniedHttpException('You are not a member of this organization.');
+                    }
                 }
             }
         }

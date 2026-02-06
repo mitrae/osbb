@@ -6,7 +6,7 @@ interface User {
   firstName: string;
   lastName: string;
   roles: string[];
-  type: 'user' | 'admin';
+  isPlatformAdmin: boolean;
 }
 
 interface AuthState {
@@ -25,7 +25,7 @@ export const useAuthStore = defineStore('auth', {
     isManager: (state) =>
       state.user?.roles?.some((r) => ['ROLE_MANAGER', 'ROLE_ADMIN'].includes(r)) ?? false,
     isAdmin: (state) => state.user?.roles?.includes('ROLE_ADMIN') ?? false,
-    isPlatformAdmin: (state) => state.user?.type === 'admin',
+    isPlatformAdmin: (state) => state.user?.isPlatformAdmin ?? false,
   },
 
   actions: {
@@ -44,25 +44,9 @@ export const useAuthStore = defineStore('auth', {
       const data = await response.json();
       this.setTokenAndUser(data.token);
 
-      // Load org memberships after user login
+      // Load org memberships after login
       const org = useOrganizationStore();
       await org.loadMemberships();
-    },
-
-    async adminLogin(email: string, password: string) {
-      const config = useRuntimeConfig();
-      const response = await fetch(`${config.public.apiBase}/api/admin/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Invalid credentials');
-      }
-
-      const data = await response.json();
-      this.setTokenAndUser(data.token);
     },
 
     setTokenAndUser(token: string) {
@@ -71,7 +55,7 @@ export const useAuthStore = defineStore('auth', {
       // Decode JWT payload to get user info
       const payload = JSON.parse(atob(token.split('.')[1]));
 
-      // Strip type prefix from username (e.g. "user:email@example.com" → "email@example.com")
+      // Strip legacy type prefix from username if present
       let email = payload.username;
       if (email.includes(':')) {
         email = email.substring(email.indexOf(':') + 1);
@@ -83,7 +67,7 @@ export const useAuthStore = defineStore('auth', {
         firstName: payload.firstName || '',
         lastName: payload.lastName || '',
         roles: payload.roles || [],
-        type: payload.type || 'user',
+        isPlatformAdmin: payload.isPlatformAdmin || false,
       };
 
       if (import.meta.client) {

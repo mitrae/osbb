@@ -2,7 +2,6 @@
 
 namespace App\Security;
 
-use App\Entity\Admin;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Security\Core\Exception\UnsupportedUserException;
@@ -19,45 +18,32 @@ class TypeAwareUserProvider implements UserProviderInterface
 
     public function loadUserByIdentifier(string $identifier): UserInterface
     {
+        // Strip legacy prefixes for backward compat with old tokens
         if (str_starts_with($identifier, 'admin:')) {
-            $email = substr($identifier, 6);
-            $user = $this->entityManager->getRepository(Admin::class)->findOneBy(['email' => $email]);
-            if ($user) {
-                return $user;
-            }
-            throw new UserNotFoundException(sprintf('Admin "%s" not found.', $email));
+            $identifier = substr($identifier, 6);
+        } elseif (str_starts_with($identifier, 'user:')) {
+            $identifier = substr($identifier, 5);
         }
 
-        if (str_starts_with($identifier, 'user:')) {
-            $email = substr($identifier, 5);
-        } else {
-            // Fallback: no prefix means legacy token, assume user
-            $email = $identifier;
-        }
-
-        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
+        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $identifier]);
         if ($user) {
             return $user;
         }
 
-        throw new UserNotFoundException(sprintf('User "%s" not found.', $email));
+        throw new UserNotFoundException(sprintf('User "%s" not found.', $identifier));
     }
 
     public function refreshUser(UserInterface $user): UserInterface
     {
-        if ($user instanceof Admin) {
-            return $this->loadUserByIdentifier('admin:' . $user->getEmail());
+        if (!$user instanceof User) {
+            throw new UnsupportedUserException(sprintf('Instances of "%s" are not supported.', get_class($user)));
         }
 
-        if ($user instanceof User) {
-            return $this->loadUserByIdentifier('user:' . $user->getEmail());
-        }
-
-        throw new UnsupportedUserException(sprintf('Instances of "%s" are not supported.', get_class($user)));
+        return $this->loadUserByIdentifier($user->getEmail());
     }
 
     public function supportsClass(string $class): bool
     {
-        return $class === User::class || $class === Admin::class;
+        return $class === User::class;
     }
 }

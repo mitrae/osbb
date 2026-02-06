@@ -8,8 +8,6 @@ use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Delete;
-use Doctrine\Common\Collections\ArrayCollection;
-use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
 
@@ -18,9 +16,9 @@ use Symfony\Component\Serializer\Annotation\Groups;
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ROLE_ADMIN')"),
-        new Patch(security: "is_granted('ROLE_ADMIN')"),
-        new Delete(security: "is_granted('ROLE_ADMIN')"),
+        new Post(security: "is_granted('ROLE_PLATFORM_ADMIN') or is_granted('ORG_ROLE_ADMIN')"),
+        new Patch(security: "is_granted('ROLE_PLATFORM_ADMIN') or is_granted('ORG_ROLE_ADMIN')"),
+        new Delete(security: "is_granted('ROLE_PLATFORM_ADMIN') or is_granted('ORG_ROLE_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['building:read']],
     denormalizationContext: ['groups' => ['building:write']],
@@ -30,7 +28,7 @@ class Building
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['building:read', 'user:read'])]
+    #[Groups(['building:read', 'apartment:read', 'connection_request:read'])]
     private ?int $id = null;
 
     #[ORM\ManyToOne(targetEntity: Organization::class, inversedBy: 'buildings')]
@@ -39,19 +37,15 @@ class Building
     private ?Organization $organization = null;
 
     #[ORM\Column(length: 500)]
-    #[Groups(['building:read', 'building:write', 'user:read'])]
+    #[Groups(['building:read', 'building:write', 'apartment:read', 'connection_request:read'])]
     private ?string $address = null;
 
     #[ORM\Column]
     #[Groups(['building:read'])]
     private ?\DateTimeImmutable $createdAt = null;
 
-    #[ORM\OneToMany(mappedBy: 'building', targetEntity: User::class)]
-    private Collection $users;
-
     public function __construct()
     {
-        $this->users = new ArrayCollection();
         $this->createdAt = new \DateTimeImmutable();
     }
 
@@ -85,10 +79,5 @@ class Building
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;
-    }
-
-    public function getUsers(): Collection
-    {
-        return $this->users;
     }
 }

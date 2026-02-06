@@ -2,12 +2,33 @@
   <div>
     <div class="page-header">
       <h1>Requests</h1>
-      <button class="btn btn-primary" @click="showForm = !showForm">
+      <button class="btn btn-primary" @click="showForm = !showForm" v-if="selectedOrgId && canCreate">
         {{ showForm ? 'Cancel' : '+ New Request' }}
       </button>
     </div>
 
-    <div v-if="showForm" class="card">
+    <!-- Filters -->
+    <div class="card" style="padding:0.7rem 1rem;display:flex;gap:1rem;flex-wrap:wrap;align-items:end">
+      <div class="form-group" style="margin:0;min-width:180px">
+        <label style="font-size:0.85rem">Organization</label>
+        <select v-model="selectedOrgId" @change="onFilterChange">
+          <option v-if="auth.isPlatformAdmin" :value="null">All Organizations</option>
+          <option v-for="o in orgs" :key="o.id" :value="o.id">{{ o.name }}</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;min-width:140px">
+        <label style="font-size:0.85rem">Status</label>
+        <select v-model="statusFilter" @change="onFilterChange">
+          <option value="">All</option>
+          <option value="open">Open</option>
+          <option value="in_progress">In Progress</option>
+          <option value="resolved">Resolved</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+    </div>
+
+    <div v-if="showForm && selectedOrgId" class="card">
       <h2>Create Request</h2>
       <form @submit.prevent="createRequest">
         <div class="form-group">
@@ -46,31 +67,72 @@
         <p style="margin-top:0.5rem;font-size:0.9rem;color:#666">
           {{ req.description?.substring(0, 120) }}{{ req.description?.length > 120 ? '...' : '' }}
         </p>
-        <small style="color:#999">{{ new Date(req.createdAt).toLocaleDateString() }}</small>
+        <small style="color:#999">
+          <span v-if="!selectedOrgId && req.organization?.name" style="font-weight:500;color:#555">{{ req.organization.name }} &middot; </span>
+          {{ new Date(req.createdAt).toLocaleDateString() }}
+        </small>
       </NuxtLink>
     </div>
 
-    <p v-if="!loading && requests.length === 0" class="card">No requests yet.</p>
+    <p v-if="!loading && !auth.isPlatformAdmin && !selectedOrgId" class="card">Select an organization to view requests.</p>
+    <p v-else-if="!loading && requests.length === 0" class="card">No requests found.</p>
   </div>
 </template>
 
 <script setup lang="ts">
 const api = useApi();
+const auth = useAuthStore();
+const orgStore = useOrganizationStore();
 const requests = ref<any[]>([]);
 const loading = ref(true);
 const showForm = ref(false);
 const submitting = ref(false);
 const error = ref('');
+const statusFilter = ref('');
 
 const form = reactive({ title: '', description: '', visibility: 'private' });
+
+const orgs = computed(() => orgStore.allOrgs);
+const selectedOrgId = ref<number | null>(null);
+
+const canCreate = computed(() => {
+  if (auth.isPlatformAdmin) return true;
+  if (!selectedOrgId.value) return false;
+  const membership = orgStore.memberships.find(m => m.organization.id === selectedOrgId.value);
+  if (membership) return true;
+  // Residents can also create requests
+  return orgStore.residentOrgs.some(r => r.orgId === selectedOrgId.value);
+});
+
+function onFilterChange() {
+  showForm.value = false;
+  loadRequests();
+}
+
+function withOrgContext<T>(fn: () => Promise<T>, orgId?: number | null): Promise<T> {
+  const savedOrg = orgStore.currentOrgId;
+  const target = orgId !== undefined ? orgId : selectedOrgId.value;
+  orgStore.setCurrentOrg(target);
+  return fn().finally(() => {
+    orgStore.setCurrentOrg(savedOrg);
+  });
+}
 
 async function loadRequests() {
   loading.value = true;
   try {
-    const data = await api.get<any>('/api/requests');
+    let url = '/api/requests';
+    const params: string[] = [];
+    if (statusFilter.value) {
+      params.push(`status=${statusFilter.value}`);
+    }
+    if (params.length) {
+      url += '?' + params.join('&');
+    }
+    const data = await withOrgContext(() => api.get<any>(url));
     requests.value = data['hydra:member'] || data.member || [];
   } catch {
-    // handle error
+    requests.value = [];
   } finally {
     loading.value = false;
   }
@@ -80,7 +142,7 @@ async function createRequest() {
   error.value = '';
   submitting.value = true;
   try {
-    await api.post('/api/requests', form);
+    await withOrgContext(() => api.post('/api/requests', form));
     form.title = '';
     form.description = '';
     form.visibility = 'private';
@@ -93,5 +155,15 @@ async function createRequest() {
   }
 }
 
-onMounted(loadRequests);
+onMounted(() => {
+  if (auth.isPlatformAdmin) {
+    // Platform admin defaults to "All Organizations"
+    selectedOrgId.value = null;
+  } else if (orgs.value.length > 0) {
+    selectedOrgId.value = orgStore.currentOrgId && orgs.value.some(o => o.id === orgStore.currentOrgId)
+      ? orgStore.currentOrgId
+      : orgs.value[0].id;
+  }
+  loadRequests();
+});
 </script>

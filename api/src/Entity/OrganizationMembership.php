@@ -17,27 +17,21 @@ use Symfony\Component\Serializer\Annotation\Groups;
 #[ORM\Table(name: 'organization_membership')]
 #[ORM\UniqueConstraint(name: 'unique_user_org', columns: ['user_id', 'organization_id'])]
 #[UniqueEntity(fields: ['user', 'organization'], message: 'User is already a member of this organization.')]
-#[ORM\HasLifecycleCallbacks]
 #[ApiResource(
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ROLE_USER')", processor: MembershipProcessor::class),
-        new Patch(security: "is_granted('ROLE_USER')", processor: MembershipProcessor::class),
-        new Delete(security: "is_granted('ROLE_ADMIN')"),
+        new Post(security: "is_granted('ORG_ROLE_ADMIN')", processor: MembershipProcessor::class),
+        new Patch(security: "is_granted('ORG_ROLE_ADMIN')", processor: MembershipProcessor::class),
+        new Delete(security: "is_granted('ROLE_PLATFORM_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['membership:read']],
     denormalizationContext: ['groups' => ['membership:write']],
 )]
 class OrganizationMembership
 {
-    public const ROLE_RESIDENT = 'ROLE_RESIDENT';
     public const ROLE_MANAGER = 'ROLE_MANAGER';
     public const ROLE_ADMIN = 'ROLE_ADMIN';
-
-    public const STATUS_PENDING = 'pending';
-    public const STATUS_APPROVED = 'approved';
-    public const STATUS_REJECTED = 'rejected';
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -47,7 +41,7 @@ class OrganizationMembership
 
     #[ORM\ManyToOne(targetEntity: User::class, inversedBy: 'memberships')]
     #[ORM\JoinColumn(nullable: false)]
-    #[Groups(['membership:read'])]
+    #[Groups(['membership:read', 'membership:write'])]
     private ?User $user = null;
 
     #[ORM\ManyToOne(targetEntity: Organization::class, inversedBy: 'memberships')]
@@ -57,30 +51,15 @@ class OrganizationMembership
 
     #[ORM\Column(length: 30)]
     #[Groups(['membership:read', 'membership:write'])]
-    private string $role = self::ROLE_RESIDENT;
-
-    #[ORM\Column(length: 20)]
-    #[Groups(['membership:read', 'membership:write'])]
-    private string $status = self::STATUS_PENDING;
+    private string $role = self::ROLE_ADMIN;
 
     #[ORM\Column]
     #[Groups(['membership:read'])]
     private ?\DateTimeImmutable $createdAt = null;
 
-    #[ORM\Column]
-    #[Groups(['membership:read'])]
-    private ?\DateTimeImmutable $updatedAt = null;
-
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable();
-        $this->updatedAt = new \DateTimeImmutable();
-    }
-
-    #[ORM\PreUpdate]
-    public function onPreUpdate(): void
-    {
-        $this->updatedAt = new \DateTimeImmutable();
     }
 
     public function getId(): ?int
@@ -121,29 +100,8 @@ class OrganizationMembership
         return $this;
     }
 
-    public function getStatus(): string
-    {
-        return $this->status;
-    }
-
-    public function setStatus(string $status): static
-    {
-        $this->status = $status;
-        return $this;
-    }
-
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;
-    }
-
-    public function getUpdatedAt(): ?\DateTimeImmutable
-    {
-        return $this->updatedAt;
-    }
-
-    public function isApproved(): bool
-    {
-        return $this->status === self::STATUS_APPROVED;
     }
 }

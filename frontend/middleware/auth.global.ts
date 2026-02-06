@@ -1,6 +1,6 @@
 export default defineNuxtRouteMiddleware((to) => {
   const auth = useAuthStore();
-  const publicPages = ['/login', '/register', '/admin/login'];
+  const publicPages = ['/login', '/register'];
 
   if (!publicPages.includes(to.path) && !auth.isAuthenticated) {
     return navigateTo('/login');
@@ -10,15 +10,15 @@ export default defineNuxtRouteMiddleware((to) => {
     return navigateTo('/');
   }
 
-  // Allow /organizations routes without org context (user needs to pick one)
+  // Allow /organizations routes without org context
   if (to.path.startsWith('/organizations')) {
     return;
   }
 
   // For regular users with no org, redirect to /organizations (except public pages)
-  if (auth.isAuthenticated && auth.user?.type === 'user' && !publicPages.includes(to.path)) {
+  if (auth.isAuthenticated && !auth.isPlatformAdmin && !publicPages.includes(to.path)) {
     const org = useOrganizationStore();
-    if (!org.hasOrg && org.approvedMemberships.length === 0 && to.path !== '/organizations') {
+    if (!org.hasOrg && org.allOrgs.length === 0 && to.path !== '/organizations') {
       return navigateTo('/organizations');
     }
   }

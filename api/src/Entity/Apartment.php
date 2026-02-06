@@ -34,7 +34,7 @@ class Apartment
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['apartment:read', 'ownership:read'])]
+    #[Groups(['apartment:read', 'resident:read', 'connection_request:read'])]
     private ?int $id = null;
 
     #[ORM\ManyToOne(targetEntity: Building::class)]
@@ -44,7 +44,7 @@ class Apartment
 
     #[ORM\Column(length: 20)]
     #[Assert\NotBlank]
-    #[Groups(['apartment:read', 'apartment:write', 'ownership:read'])]
+    #[Groups(['apartment:read', 'apartment:write', 'resident:read', 'connection_request:read'])]
     private ?string $number = null;
 
     #[ORM\Column(type: 'decimal', precision: 10, scale: 2)]
@@ -56,13 +56,13 @@ class Apartment
     #[Groups(['apartment:read'])]
     private ?\DateTimeImmutable $createdAt = null;
 
-    #[ORM\OneToMany(mappedBy: 'apartment', targetEntity: ApartmentOwnership::class, cascade: ['remove'])]
-    private Collection $ownerships;
+    #[ORM\OneToMany(mappedBy: 'apartment', targetEntity: Resident::class, cascade: ['remove'])]
+    private Collection $residents;
 
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable();
-        $this->ownerships = new ArrayCollection();
+        $this->residents = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -108,8 +108,8 @@ class Apartment
         return $this->createdAt;
     }
 
-    public function getOwnerships(): Collection
+    public function getResidents(): Collection
     {
-        return $this->ownerships;
+        return $this->residents;
     }
 }

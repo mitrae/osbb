@@ -7,6 +7,7 @@ use ApiPlatform\Metadata\Post;
 use ApiPlatform\State\ProcessorInterface;
 use App\Entity\OrganizationMembership;
 use App\Entity\Organization;
+use App\Entity\Resident;
 use App\Entity\Survey;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
@@ -47,19 +48,39 @@ final class SurveyProcessor implements ProcessorInterface
                 throw new BadRequestHttpException('Organization not found.');
             }
 
-            // Validate user is an approved member of this org
-            $membership = $this->em->getRepository(OrganizationMembership::class)->findOneBy([
-                'user' => $user,
-                'organization' => $organization,
-                'status' => OrganizationMembership::STATUS_APPROVED,
-            ]);
-            if (!$membership) {
-                throw new AccessDeniedHttpException('You are not an approved member of this organization.');
+            // Validate user has access: platform admin, membership, or resident link
+            if (!$user->isPlatformAdmin() && !$this->userHasOrgAccess($user, $organization)) {
+                throw new AccessDeniedHttpException('You are not a member of this organization.');
             }
 
             $data->setOrganization($organization);
         }
 
         return $this->persistProcessor->process($data, $operation, $uriVariables, $context);
+    }
+
+    private function userHasOrgAccess(User $user, Organization $organization): bool
+    {
+        $membership = $this->em->getRepository(OrganizationMembership::class)->findOneBy([
+            'user' => $user,
+            'organization' => $organization,
+        ]);
+        if ($membership) {
+            return true;
+        }
+
+        $count = $this->em->createQueryBuilder()
+            ->select('COUNT(r.id)')
+            ->from(Resident::class, 'r')
+            ->join('r.apartment', 'a')
+            ->join('a.building', 'b')
+            ->where('r.user = :user')
+            ->andWhere('b.organization = :org')
+            ->setParameter('user', $user)
+            ->setParameter('org', $organization)
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        return $count > 0;
     }
 }

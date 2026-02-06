@@ -25,11 +25,6 @@ services:
             $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
         tags: ['api_platform.state_processor']
 
-    App\State\AdminPasswordHasher:
-        arguments:
-            $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
-        tags: ['api_platform.state_processor']
-
     App\State\RequestProcessor:
         arguments:
             $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
@@ -51,6 +46,16 @@ services:
         tags: ['api_platform.state_processor']
 
     App\State\RequestCommentProcessor:
+        arguments:
+            $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
+        tags: ['api_platform.state_processor']
+
+    App\State\ConnectionRequestProcessor:
+        arguments:
+            $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
+        tags: ['api_platform.state_processor']
+
+    App\State\ResidentProcessor:
         arguments:
             $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
         tags: ['api_platform.state_processor']
