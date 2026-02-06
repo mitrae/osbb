@@ -63,7 +63,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     private ?string $lastName = null;
 
     #[ORM\Column(length: 20, nullable: true)]
-    #[Groups(['user:read', 'user:write'])]
+    #[Groups(['user:read', 'user:write', 'membership:read'])]
     private ?string $phone = null;
 
     #[ORM\Column(type: 'json')]

@@ -2,50 +2,61 @@
   <div>
     <NuxtLink :to="`/organizations/${route.params.id}`" style="color:#1a73e8;text-decoration:none;font-size:0.9rem">&larr; Back to Organization</NuxtLink>
 
-    <h1 style="margin-top:1rem">Members</h1>
+    <h1 style="margin-top:1rem">{{ orgName ? `${orgName} — Members` : 'Members' }}</h1>
 
-    <!-- Pending requests -->
-    <div v-if="pending.length > 0" class="card">
-      <h2>Pending Join Requests</h2>
-      <div v-for="m in pending" :key="m.id" class="list-item">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <strong>{{ m.userName }}</strong>
-            <span style="margin-left:0.5rem;font-size:0.85rem;color:#666">{{ m.userEmail }}</span>
-          </div>
-          <div style="display:flex;gap:0.5rem">
-            <button class="btn btn-primary" @click="updateMembership(m.id, 'approved')">Approve</button>
-            <button class="btn btn-danger" @click="updateMembership(m.id, 'rejected')">Reject</button>
-          </div>
-        </div>
+    <div class="card" v-if="!loading">
+      <div class="filters">
+        <input
+          v-model="search"
+          type="text"
+          placeholder="Search by name, phone, apartment..."
+          class="search-input"
+        />
+        <select v-if="buildings.length > 2" v-model="selectedBuildingId" class="building-filter">
+          <option :value="null">All buildings</option>
+          <option v-for="b in buildings" :key="b.id" :value="b.id">{{ b.address }}</option>
+        </select>
       </div>
-    </div>
 
-    <!-- Approved members -->
-    <div class="card">
-      <h2>Members</h2>
-      <div v-if="loading">Loading...</div>
-      <div v-for="m in approved" :key="m.id" class="list-item">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <strong>{{ m.userName }}</strong>
-            <span style="margin-left:0.5rem;font-size:0.85rem;color:#666">{{ m.userEmail }}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:0.5rem">
-            <select
-              :value="m.role"
-              @change="updateRole(m.id, ($event.target as HTMLSelectElement).value)"
-              style="padding:0.3rem;border:1px solid #ddd;border-radius:4px;font-size:0.85rem"
-            >
-              <option value="ROLE_RESIDENT">Resident</option>
-              <option value="ROLE_MANAGER">Manager</option>
-              <option value="ROLE_ADMIN">Admin</option>
-            </select>
-          </div>
-        </div>
-      </div>
-      <p v-if="!loading && approved.length === 0">No approved members yet.</p>
+      <table class="members-table" v-if="filtered.length > 0">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Apartment</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="m in filtered" :key="m.id">
+            <td>
+              <strong>{{ m.userName }}</strong>
+              <div class="email">{{ m.userEmail }}</div>
+            </td>
+            <td>{{ m.phone || '—' }}</td>
+            <td>
+              <span v-if="m.apartmentNumber">
+                Apt {{ m.apartmentNumber }}
+                <span v-if="m.buildingAddress" class="building-label">{{ m.buildingAddress }}</span>
+              </span>
+              <span v-else>—</span>
+            </td>
+            <td>
+              <select
+                :value="m.role"
+                @change="updateRole(m.id, ($event.target as HTMLSelectElement).value)"
+                class="role-select"
+              >
+                <option value="ROLE_MANAGER">Manager</option>
+                <option value="ROLE_ADMIN">Admin</option>
+              </select>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else>No members match your search.</p>
     </div>
+    <div class="card" v-else>Loading...</div>
 
     <p v-if="error" class="error">{{ error }}</p>
   </div>
@@ -55,43 +66,107 @@
 const route = useRoute();
 const api = useApi();
 const orgStore = useOrganizationStore();
-const memberships = ref<any[]>([]);
+
+const allMembers = ref<any[]>([]);
+const buildings = ref<any[]>([]);
+const orgName = ref('');
 const loading = ref(true);
 const error = ref('');
+const search = ref('');
+const selectedBuildingId = ref<number | null>(null);
 
-const pending = computed(() => memberships.value.filter((m) => m.status === 'pending'));
-const approved = computed(() => memberships.value.filter((m) => m.status === 'approved'));
+const filtered = computed(() => {
+  let list = allMembers.value;
 
-async function loadMembers() {
-  loading.value = true;
-  try {
-    // Set org context for this request
-    const savedOrg = orgStore.currentOrgId;
-    orgStore.setCurrentOrg(Number(route.params.id));
-    const data = await api.get<any>('/api/organization_memberships');
-    const members = data['hydra:member'] || data.member || [];
-    memberships.value = members.map((m: any) => ({
-      id: m.id,
-      status: m.status,
-      role: m.role,
-      userName: typeof m.user === 'string' ? m.user : `${m.user?.firstName || ''} ${m.user?.lastName || ''}`.trim() || m.user?.email,
-      userEmail: typeof m.user === 'string' ? '' : m.user?.email || '',
-    }));
-    if (savedOrg) orgStore.setCurrentOrg(savedOrg);
-  } catch {
-    // handle error
-  } finally {
-    loading.value = false;
+  if (selectedBuildingId.value) {
+    list = list.filter((m) => m.buildingId === selectedBuildingId.value);
   }
-}
 
-async function updateMembership(id: number, status: string) {
-  error.value = '';
+  const q = search.value.toLowerCase().trim();
+  if (q) {
+    list = list.filter((m) =>
+      m.userName.toLowerCase().includes(q) ||
+      (m.phone && m.phone.toLowerCase().includes(q)) ||
+      (m.userEmail && m.userEmail.toLowerCase().includes(q)) ||
+      (m.apartmentNumber && m.apartmentNumber.toLowerCase().includes(q))
+    );
+  }
+
+  return list;
+});
+
+async function loadData() {
+  loading.value = true;
+  const orgId = Number(route.params.id);
+  const savedOrg = orgStore.currentOrgId;
+  orgStore.setCurrentOrg(orgId);
+
   try {
-    await api.patch(`/api/organization_memberships/${id}`, { status });
-    await loadMembers();
-  } catch (e: any) {
-    error.value = e.message;
+    // Load core data (org info + memberships)
+    const [orgData, membData] = await Promise.all([
+      api.get<any>(`/api/organizations/${orgId}`),
+      api.get<any>('/api/organization_memberships'),
+    ]);
+
+    orgName.value = orgData.name;
+
+    // Load enrichment data (residents + buildings) — optional, don't block members list
+    let resData: any = { member: [] };
+    let bldData: any = { member: [] };
+    try {
+      [resData, bldData] = await Promise.all([
+        api.get<any>('/api/residents'),
+        api.get<any>('/api/buildings'),
+      ]);
+    } catch {
+      // enrichment data unavailable — members still display without apartment info
+    }
+
+    buildings.value = (bldData['hydra:member'] || bldData['member'] || []).map((b: any) => ({
+      id: b.id,
+      address: b.address,
+    }));
+
+    // Build a map: userId → { apartmentNumber, buildingId, buildingAddress }
+    const residents = resData['hydra:member'] || resData['member'] || [];
+    const userResidentMap: Record<number, { apartmentNumber: string; buildingId: number | null; buildingAddress: string }> = {};
+    for (const r of residents) {
+      const userId = typeof r.user === 'object' ? r.user?.id : null;
+      if (!userId) continue;
+      const aptNumber = typeof r.apartment === 'object' ? r.apartment?.number : null;
+      const bldg = typeof r.apartment === 'object' && typeof r.apartment?.building === 'object'
+        ? r.apartment.building
+        : null;
+      if (!userResidentMap[userId]) {
+        userResidentMap[userId] = {
+          apartmentNumber: aptNumber || '',
+          buildingId: bldg?.id || null,
+          buildingAddress: bldg?.address || '',
+        };
+      }
+    }
+
+    const members = membData['hydra:member'] || membData['member'] || [];
+    allMembers.value = members.map((m: any) => {
+      const user = typeof m.user === 'object' ? m.user : null;
+      const userId = user?.id;
+      const resInfo = userId ? userResidentMap[userId] : null;
+      return {
+        id: m.id,
+        role: m.role,
+        userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : String(m.user),
+        userEmail: user?.email || '',
+        phone: user?.phone || '',
+        apartmentNumber: resInfo?.apartmentNumber || '',
+        buildingId: resInfo?.buildingId || null,
+        buildingAddress: resInfo?.buildingAddress || '',
+      };
+    });
+  } catch {
+    error.value = 'Failed to load members';
+  } finally {
+    if (savedOrg) orgStore.setCurrentOrg(savedOrg);
+    loading.value = false;
   }
 }
 
@@ -99,21 +174,67 @@ async function updateRole(id: number, role: string) {
   error.value = '';
   try {
     await api.patch(`/api/organization_memberships/${id}`, { role });
-    await loadMembers();
+    await loadData();
   } catch (e: any) {
     error.value = e.message;
   }
 }
 
-onMounted(loadMembers);
+onMounted(loadData);
 </script>
 
 <style scoped>
-.list-item {
-  padding: 0.7rem 0;
-  border-bottom: 1px solid #eee;
+.filters {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
 }
-.list-item:last-child {
+.search-input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+.building-filter {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  min-width: 180px;
+}
+.members-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.members-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid #eee;
+  font-size: 0.85rem;
+  color: #666;
+}
+.members-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+}
+.members-table tr:last-child td {
   border-bottom: none;
+}
+.email {
+  font-size: 0.8rem;
+  color: #888;
+}
+.building-label {
+  display: block;
+  font-size: 0.8rem;
+  color: #888;
+}
+.role-select {
+  padding: 0.3rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.85rem;
 }
 </style>
