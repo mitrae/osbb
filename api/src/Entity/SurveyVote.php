@@ -19,7 +19,7 @@ use Symfony\Component\Serializer\Annotation\Groups;
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ROLE_RESIDENT')", processor: VoteProcessor::class),
+        new Post(security: "is_granted('ORG_ROLE_RESIDENT')", processor: VoteProcessor::class),
         new Delete(security: "is_granted('ROLE_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['vote:read']],
@@ -46,6 +46,10 @@ class SurveyVote
     #[ORM\Column]
     #[Groups(['vote:read', 'vote:write'])]
     private bool $vote = false;
+
+    #[ORM\Column(type: 'decimal', precision: 10, scale: 2, nullable: true)]
+    #[Groups(['vote:read'])]
+    private ?string $weight = null;
 
     public function getId(): ?int
     {
@@ -82,6 +86,17 @@ class SurveyVote
     public function setVote(bool $vote): static
     {
         $this->vote = $vote;
+        return $this;
+    }
+
+    public function getWeight(): ?string
+    {
+        return $this->weight;
+    }
+
+    public function setWeight(?string $weight): static
+    {
+        $this->weight = $weight;
         return $this;
     }
 }

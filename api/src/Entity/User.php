@@ -9,6 +9,8 @@ use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Delete;
 use App\State\UserPasswordHasher;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
@@ -35,13 +37,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['user:read', 'request:read', 'survey:read', 'vote:read'])]
+    #[Groups(['user:read', 'request:read', 'survey:read', 'vote:read', 'membership:read', 'comment:read'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 180, unique: true)]
     #[Assert\Email]
     #[Assert\NotBlank]
-    #[Groups(['user:read', 'user:write', 'request:read'])]
+    #[Groups(['user:read', 'user:write', 'request:read', 'membership:read', 'comment:read'])]
     private ?string $email = null;
 
     #[ORM\Column]
@@ -52,12 +54,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column(length: 100)]
     #[Assert\NotBlank]
-    #[Groups(['user:read', 'user:write', 'request:read', 'survey:read'])]
+    #[Groups(['user:read', 'user:write', 'request:read', 'survey:read', 'membership:read', 'comment:read'])]
     private ?string $firstName = null;
 
     #[ORM\Column(length: 100)]
     #[Assert\NotBlank]
-    #[Groups(['user:read', 'user:write', 'request:read', 'survey:read'])]
+    #[Groups(['user:read', 'user:write', 'request:read', 'survey:read', 'membership:read', 'comment:read'])]
     private ?string $lastName = null;
 
     #[ORM\Column(length: 20, nullable: true)]
@@ -66,7 +68,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column(type: 'json')]
     #[Groups(['user:read'])]
-    private array $roles = ['ROLE_RESIDENT'];
+    private array $roles = ['ROLE_USER'];
 
     #[ORM\ManyToOne(targetEntity: Organization::class, inversedBy: 'users')]
     #[Groups(['user:read', 'user:write'])]
@@ -84,9 +86,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[Groups(['user:read'])]
     private ?\DateTimeImmutable $createdAt = null;
 
+    #[ORM\OneToMany(mappedBy: 'user', targetEntity: OrganizationMembership::class)]
+    private Collection $memberships;
+
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable();
+        $this->memberships = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -219,5 +225,10 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;
+    }
+
+    public function getMemberships(): Collection
+    {
+        return $this->memberships;
     }
 }

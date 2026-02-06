@@ -8,8 +8,24 @@
         <NuxtLink to="/">Dashboard</NuxtLink>
         <NuxtLink to="/requests">Requests</NuxtLink>
         <NuxtLink to="/surveys">Surveys</NuxtLink>
+        <NuxtLink to="/organizations">Organizations</NuxtLink>
       </div>
       <div class="navbar-end">
+        <select
+          v-if="auth.user?.type === 'user' && org.approvedMemberships.length > 0"
+          class="org-selector"
+          :value="org.currentOrgId || ''"
+          @change="switchOrg(($event.target as HTMLSelectElement).value)"
+        >
+          <option value="" disabled>Select organization</option>
+          <option
+            v-for="m in org.approvedMemberships"
+            :key="m.organization.id"
+            :value="m.organization.id"
+          >
+            {{ m.organization.name || `Org #${m.organization.id}` }}
+          </option>
+        </select>
         <span class="user-name">{{ auth.user?.type === 'admin' ? auth.user?.email : `${auth.user?.firstName} ${auth.user?.lastName}` }}</span>
         <button class="btn btn-sm" @click="auth.logout()">Logout</button>
       </div>
@@ -22,6 +38,15 @@
 
 <script setup lang="ts">
 const auth = useAuthStore();
+const org = useOrganizationStore();
+
+function switchOrg(value: string) {
+  if (value) {
+    org.setCurrentOrg(parseInt(value));
+    // Refresh the current page to reload data with new org context
+    navigateTo(useRoute().fullPath);
+  }
+}
 </script>
 
 <style>
@@ -81,6 +106,21 @@ body {
   gap: 1rem;
 }
 
+.org-selector {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.org-selector option {
+  color: #333;
+  background: white;
+}
+
 .user-name {
   font-size: 0.9rem;
   opacity: 0.9;
@@ -122,6 +162,15 @@ body {
 
 .btn-sm:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.btn-danger {
+  background: #d32f2f;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #b71c1c;
 }
 
 .card {
@@ -171,10 +220,14 @@ body {
   font-weight: 500;
 }
 
+.badge-open { background: #e3f2fd; color: #1565c0; }
 .badge-new { background: #e3f2fd; color: #1565c0; }
 .badge-in_progress { background: #fff3e0; color: #e65100; }
 .badge-resolved { background: #e8f5e9; color: #2e7d32; }
+.badge-closed { background: #fce4ec; color: #c62828; }
 .badge-rejected { background: #fce4ec; color: #c62828; }
+.badge-pending { background: #fff3e0; color: #e65100; }
+.badge-approved { background: #e8f5e9; color: #2e7d32; }
 
 h1 { font-size: 1.8rem; margin-bottom: 1.5rem; }
 h2 { font-size: 1.4rem; margin-bottom: 1rem; }

@@ -1,6 +1,7 @@
 export const useApi = () => {
   const config = useRuntimeConfig();
   const auth = useAuthStore();
+  const org = useOrganizationStore();
 
   const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
     const headers: Record<string, string> = {
@@ -11,6 +12,10 @@ export const useApi = () => {
 
     if (auth.token) {
       headers.Authorization = `Bearer ${auth.token}`;
+    }
+
+    if (org.currentOrgId) {
+      headers['X-Organization-Id'] = String(org.currentOrgId);
     }
 
     const response = await fetch(`${config.public.apiBase}${path}`, {
@@ -26,7 +31,7 @@ export const useApi = () => {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || error['hydra:description'] || `HTTP ${response.status}`);
+      throw new Error(error.detail || error.message || error['hydra:description'] || `HTTP ${response.status}`);
     }
 
     if (response.status === 204) {

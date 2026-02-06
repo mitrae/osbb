@@ -16,7 +16,7 @@ use Symfony\Component\Serializer\Annotation\Groups;
 #[ORM\Entity]
 #[ApiResource(
     operations: [
-        new GetCollection(security: "is_granted('ROLE_ADMIN')"),
+        new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
         new Post(security: "is_granted('ROLE_ADMIN')"),
         new Patch(security: "is_granted('ROLE_ADMIN')"),
@@ -30,15 +30,15 @@ class Organization
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['organization:read', 'building:read', 'user:read', 'request:read', 'survey:read'])]
+    #[Groups(['organization:read', 'building:read', 'user:read', 'request:read', 'survey:read', 'membership:read'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['organization:read', 'organization:write', 'building:read', 'user:read'])]
+    #[Groups(['organization:read', 'organization:write', 'building:read', 'user:read', 'membership:read'])]
     private ?string $name = null;
 
     #[ORM\Column(length: 500)]
-    #[Groups(['organization:read', 'organization:write'])]
+    #[Groups(['organization:read', 'organization:write', 'membership:read'])]
     private ?string $address = null;
 
     #[ORM\Column]
@@ -51,10 +51,14 @@ class Organization
     #[ORM\OneToMany(mappedBy: 'organization', targetEntity: User::class)]
     private Collection $users;
 
+    #[ORM\OneToMany(mappedBy: 'organization', targetEntity: OrganizationMembership::class)]
+    private Collection $memberships;
+
     public function __construct()
     {
         $this->buildings = new ArrayCollection();
         $this->users = new ArrayCollection();
+        $this->memberships = new ArrayCollection();
         $this->createdAt = new \DateTimeImmutable();
     }
 
@@ -98,5 +102,10 @@ class Organization
     public function getUsers(): Collection
     {
         return $this->users;
+    }
+
+    public function getMemberships(): Collection
+    {
+        return $this->memberships;
     }
 }

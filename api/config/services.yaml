@@ -45,6 +45,16 @@ services:
             $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
         tags: ['api_platform.state_processor']
 
+    App\State\MembershipProcessor:
+        arguments:
+            $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
+        tags: ['api_platform.state_processor']
+
+    App\State\RequestCommentProcessor:
+        arguments:
+            $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
+        tags: ['api_platform.state_processor']
+
     App\EventListener\JWTCreatedListener:
         tags:
             - { name: kernel.event_listener, event: lexik_jwt_authentication.on_jwt_created, method: onJWTCreated }

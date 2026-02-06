@@ -43,6 +43,10 @@ export const useAuthStore = defineStore('auth', {
 
       const data = await response.json();
       this.setTokenAndUser(data.token);
+
+      // Load org memberships after user login
+      const org = useOrganizationStore();
+      await org.loadMemberships();
     },
 
     async adminLogin(email: string, password: string) {
@@ -117,6 +121,8 @@ export const useAuthStore = defineStore('auth', {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_user');
       }
+      const org = useOrganizationStore();
+      org.clear();
       navigateTo('/login');
     },
 

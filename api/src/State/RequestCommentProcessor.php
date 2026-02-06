@@ -5,15 +5,14 @@ namespace App\State;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\State\ProcessorInterface;
-use App\Entity\ApartmentOwnership;
 use App\Entity\OrganizationMembership;
-use App\Entity\SurveyVote;
+use App\Entity\RequestComment;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
-final class VoteProcessor implements ProcessorInterface
+final class RequestCommentProcessor implements ProcessorInterface
 {
     public function __construct(
         private ProcessorInterface $persistProcessor,
@@ -24,16 +23,16 @@ final class VoteProcessor implements ProcessorInterface
 
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
     {
-        if ($data instanceof SurveyVote && $operation instanceof Post) {
+        if ($data instanceof RequestComment && $operation instanceof Post) {
             $user = $this->security->getUser();
             if (!$user instanceof User) {
-                throw new AccessDeniedHttpException('Only residents can vote.');
+                throw new AccessDeniedHttpException('Only users can post comments.');
             }
-            $data->setUser($user);
+            $data->setAuthor($user);
 
-            // Validate user is an approved member of the survey's org
-            $survey = $data->getQuestion()?->getSurvey();
-            $organization = $survey?->getOrganization();
+            // Validate: user must be request author or org member
+            $request = $data->getRequest();
+            $organization = $request?->getOrganization();
 
             if ($organization) {
                 $membership = $this->em->getRepository(OrganizationMembership::class)->findOneBy([
@@ -44,21 +43,6 @@ final class VoteProcessor implements ProcessorInterface
                 if (!$membership) {
                     throw new AccessDeniedHttpException('You are not an approved member of this organization.');
                 }
-
-                // Calculate weight: SUM of owned_area from user's apartments in org's buildings
-                $weight = $this->em->createQueryBuilder()
-                    ->select('SUM(ao.ownedArea)')
-                    ->from(ApartmentOwnership::class, 'ao')
-                    ->join('ao.apartment', 'a')
-                    ->join('a.building', 'b')
-                    ->where('ao.user = :user')
-                    ->andWhere('b.organization = :org')
-                    ->setParameter('user', $user)
-                    ->setParameter('org', $organization)
-                    ->getQuery()
-                    ->getSingleScalarResult();
-
-                $data->setWeight($weight ?: '0.00');
             }
         }
 

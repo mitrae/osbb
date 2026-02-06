@@ -20,8 +20,8 @@ use Symfony\Component\Validator\Constraints as Assert;
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ROLE_MANAGER')", processor: SurveyProcessor::class),
-        new Patch(security: "is_granted('ROLE_MANAGER')"),
+        new Post(security: "is_granted('ORG_ROLE_ADMIN')", processor: SurveyProcessor::class),
+        new Patch(security: "is_granted('ORG_ROLE_ADMIN')"),
         new Delete(security: "is_granted('ROLE_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['survey:read']],

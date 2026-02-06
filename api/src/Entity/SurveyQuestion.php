@@ -19,9 +19,9 @@ use Symfony\Component\Validator\Constraints as Assert;
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ROLE_MANAGER')"),
-        new Patch(security: "is_granted('ROLE_MANAGER')"),
-        new Delete(security: "is_granted('ROLE_MANAGER')"),
+        new Post(security: "is_granted('ORG_ROLE_ADMIN')"),
+        new Patch(security: "is_granted('ORG_ROLE_ADMIN')"),
+        new Delete(security: "is_granted('ORG_ROLE_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['question:read']],
     denormalizationContext: ['groups' => ['question:write']],
@@ -43,6 +43,10 @@ class SurveyQuestion
     #[Assert\NotBlank]
     #[Groups(['question:read', 'question:write', 'survey:read'])]
     private ?string $questionText = null;
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    #[Groups(['question:read', 'question:write', 'survey:read'])]
+    private ?string $description = null;
 
     #[ORM\OneToMany(mappedBy: 'question', targetEntity: SurveyVote::class, cascade: ['remove'])]
     private Collection $votes;
@@ -76,6 +80,17 @@ class SurveyQuestion
     public function setQuestionText(string $questionText): static
     {
         $this->questionText = $questionText;
+        return $this;
+    }
+
+    public function getDescription(): ?string
+    {
+        return $this->description;
+    }
+
+    public function setDescription(?string $description): static
+    {
+        $this->description = $description;
         return $this;
     }
 

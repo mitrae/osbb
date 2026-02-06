@@ -9,6 +9,8 @@ use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Delete;
 use App\State\RequestProcessor;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
@@ -20,8 +22,8 @@ use Symfony\Component\Validator\Constraints as Assert;
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ROLE_RESIDENT')", processor: RequestProcessor::class),
-        new Patch(security: "is_granted('ROLE_MANAGER')"),
+        new Post(security: "is_granted('ORG_ROLE_RESIDENT')", processor: RequestProcessor::class),
+        new Patch(security: "is_granted('ORG_ROLE_ADMIN')"),
         new Delete(security: "is_granted('ROLE_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['request:read']],
@@ -29,10 +31,10 @@ use Symfony\Component\Validator\Constraints as Assert;
 )]
 class Request
 {
-    public const STATUS_NEW = 'new';
+    public const STATUS_OPEN = 'open';
     public const STATUS_IN_PROGRESS = 'in_progress';
     public const STATUS_RESOLVED = 'resolved';
-    public const STATUS_REJECTED = 'rejected';
+    public const STATUS_CLOSED = 'closed';
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -52,7 +54,7 @@ class Request
 
     #[ORM\Column(length: 20)]
     #[Groups(['request:read', 'request:write'])]
-    private string $status = self::STATUS_NEW;
+    private string $status = self::STATUS_OPEN;
 
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(nullable: false)]
@@ -71,14 +73,23 @@ class Request
     #[Groups(['request:read'])]
     private ?\DateTimeImmutable $createdAt = null;
 
+    #[ORM\Column(length: 20)]
+    #[Groups(['request:read', 'request:write'])]
+    private string $visibility = 'private';
+
     #[ORM\Column]
     #[Groups(['request:read'])]
     private ?\DateTimeImmutable $updatedAt = null;
+
+    #[ORM\OneToMany(mappedBy: 'request', targetEntity: RequestComment::class, cascade: ['remove'])]
+    #[Groups(['request:read'])]
+    private Collection $comments;
 
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = new \DateTimeImmutable();
+        $this->comments = new ArrayCollection();
     }
 
     #[ORM\PreUpdate]
@@ -163,8 +174,24 @@ class Request
         return $this->createdAt;
     }
 
+    public function getVisibility(): string
+    {
+        return $this->visibility;
+    }
+
+    public function setVisibility(string $visibility): static
+    {
+        $this->visibility = $visibility;
+        return $this;
+    }
+
     public function getUpdatedAt(): ?\DateTimeImmutable
     {
         return $this->updatedAt;
+    }
+
+    public function getComments(): Collection
+    {
+        return $this->comments;
     }
 }
