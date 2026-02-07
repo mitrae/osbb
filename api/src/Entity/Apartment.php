@@ -2,6 +2,8 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
@@ -16,15 +18,16 @@ use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity]
-#[ORM\UniqueConstraint(name: 'unique_building_number', columns: ['building_id', 'number'])]
-#[UniqueEntity(fields: ['building', 'number'], message: 'Apartment number already exists in this building.')]
+#[ORM\UniqueConstraint(name: 'unique_building_number_type', columns: ['building_id', 'number', 'type'])]
+#[UniqueEntity(fields: ['building', 'number', 'type'], message: 'Unit number already exists in this building for this type.')]
+#[ApiFilter(SearchFilter::class, properties: ['type' => 'exact'])]
 #[ApiResource(
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
-        new Post(security: "is_granted('ORG_ROLE_ADMIN')"),
-        new Patch(security: "is_granted('ORG_ROLE_ADMIN')"),
-        new Delete(security: "is_granted('ORG_ROLE_ADMIN')"),
+        new Post(security: "is_granted('ROLE_PLATFORM_ADMIN')"),
+        new Patch(security: "is_granted('ROLE_PLATFORM_ADMIN')"),
+        new Delete(security: "is_granted('ROLE_PLATFORM_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['apartment:read']],
     denormalizationContext: ['groups' => ['apartment:write']],
@@ -39,7 +42,7 @@ class Apartment
 
     #[ORM\ManyToOne(targetEntity: Building::class)]
     #[ORM\JoinColumn(nullable: false)]
-    #[Groups(['apartment:read', 'apartment:write'])]
+    #[Groups(['apartment:read', 'apartment:write', 'resident:read'])]
     private ?Building $building = null;
 
     #[ORM\Column(length: 20)]
@@ -51,6 +54,11 @@ class Apartment
     #[Assert\Positive]
     #[Groups(['apartment:read', 'apartment:write'])]
     private ?string $totalArea = null;
+
+    #[ORM\Column(length: 20, options: ['default' => 'apartment'])]
+    #[Assert\Choice(choices: ['apartment', 'parking'])]
+    #[Groups(['apartment:read', 'apartment:write', 'resident:read', 'connection_request:read'])]
+    private string $type = 'apartment';
 
     #[ORM\Column]
     #[Groups(['apartment:read'])]
@@ -100,6 +108,17 @@ class Apartment
     public function setTotalArea(string $totalArea): static
     {
         $this->totalArea = $totalArea;
+        return $this;
+    }
+
+    public function getType(): string
+    {
+        return $this->type;
+    }
+
+    public function setType(string $type): static
+    {
+        $this->type = $type;
         return $this;
     }
 

@@ -34,6 +34,7 @@ final class VoteProcessor implements ProcessorInterface
             // Validate user is a member of the survey's org (via membership or resident link)
             $survey = $data->getQuestion()?->getSurvey();
             $organization = $survey?->getOrganization();
+            $propertyType = $survey?->getPropertyType();
 
             if ($organization) {
                 $hasMembership = $this->em->getRepository(OrganizationMembership::class)->findOneBy([
@@ -41,7 +42,7 @@ final class VoteProcessor implements ProcessorInterface
                     'organization' => $organization,
                 ]);
 
-                $hasResident = $this->em->createQueryBuilder()
+                $residentQb = $this->em->createQueryBuilder()
                     ->select('COUNT(r.id)')
                     ->from(Resident::class, 'r')
                     ->join('r.apartment', 'a')
@@ -49,16 +50,21 @@ final class VoteProcessor implements ProcessorInterface
                     ->where('r.user = :user')
                     ->andWhere('b.organization = :org')
                     ->setParameter('user', $user)
-                    ->setParameter('org', $organization)
-                    ->getQuery()
-                    ->getSingleScalarResult();
+                    ->setParameter('org', $organization);
+
+                if ($propertyType) {
+                    $residentQb->andWhere('a.type = :propertyType')
+                        ->setParameter('propertyType', $propertyType);
+                }
+
+                $hasResident = $residentQb->getQuery()->getSingleScalarResult();
 
                 if (!$hasMembership && $hasResident == 0) {
                     throw new AccessDeniedHttpException('You are not a member of this organization.');
                 }
 
                 // Calculate weight from Resident.ownedArea
-                $weight = $this->em->createQueryBuilder()
+                $weightQb = $this->em->createQueryBuilder()
                     ->select('SUM(r.ownedArea)')
                     ->from(Resident::class, 'r')
                     ->join('r.apartment', 'a')
@@ -66,9 +72,14 @@ final class VoteProcessor implements ProcessorInterface
                     ->where('r.user = :user')
                     ->andWhere('b.organization = :org')
                     ->setParameter('user', $user)
-                    ->setParameter('org', $organization)
-                    ->getQuery()
-                    ->getSingleScalarResult();
+                    ->setParameter('org', $organization);
+
+                if ($propertyType) {
+                    $weightQb->andWhere('a.type = :propertyType')
+                        ->setParameter('propertyType', $propertyType);
+                }
+
+                $weight = $weightQb->getQuery()->getSingleScalarResult();
 
                 $data->setWeight($weight ?: '0.00');
             }

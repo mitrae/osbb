@@ -19,7 +19,7 @@ use Symfony\Component\Serializer\Annotation\Groups;
         new GetCollection(security: "is_granted('ROLE_USER')"),
         new Get(security: "is_granted('ROLE_USER')"),
         new Post(security: "is_granted('ROLE_PLATFORM_ADMIN')"),
-        new Patch(security: "is_granted('ROLE_PLATFORM_ADMIN') or is_granted('ORG_ROLE_ADMIN')"),
+        new Patch(security: "is_granted('ROLE_PLATFORM_ADMIN')"),
         new Delete(security: "is_granted('ROLE_PLATFORM_ADMIN')"),
     ],
     normalizationContext: ['groups' => ['organization:read']],
@@ -30,11 +30,11 @@ class Organization
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['organization:read', 'building:read', 'user:read', 'request:read', 'survey:read', 'membership:read', 'connection_request:read'])]
+    #[Groups(['organization:read', 'building:read', 'user:read', 'request:read', 'survey:read', 'membership:read', 'connection_request:read', 'resident:read'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['organization:read', 'organization:write', 'building:read', 'user:read', 'request:read', 'survey:read', 'membership:read', 'connection_request:read'])]
+    #[Groups(['organization:read', 'organization:write', 'building:read', 'user:read', 'request:read', 'survey:read', 'membership:read', 'connection_request:read', 'resident:read'])]
     private ?string $name = null;
 
     #[ORM\Column(length: 255, nullable: true)]

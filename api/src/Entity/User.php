@@ -24,7 +24,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ApiResource(
     operations: [
         new GetCollection(security: "is_granted('ROLE_MANAGER')"),
-        new Get(security: "is_granted('ROLE_USER') and object == user"),
+        new Get(security: "is_granted('ROLE_PLATFORM_ADMIN') or object == user or is_granted('ORG_ROLE_MANAGER')"),
         new Post(security: "is_granted('ROLE_ADMIN')", processor: UserPasswordHasher::class),
         new Patch(security: "is_granted('ROLE_ADMIN') or object == user", processor: UserPasswordHasher::class),
         new Delete(security: "is_granted('ROLE_ADMIN')"),
@@ -67,7 +67,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     private ?string $phone = null;
 
     #[ORM\Column(type: 'json')]
-    #[Groups(['user:read'])]
+    #[Groups(['user:read', 'user:write'])]
     private array $roles = ['ROLE_USER'];
 
     #[ORM\Column]

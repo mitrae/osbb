@@ -98,9 +98,9 @@ ROLE_PLATFORM_ADMIN > ROLE_ADMIN > ROLE_MANAGER > ROLE_RESIDENT > ROLE_USER
 |-----------------------|------------|----------|----------------|----------------|----------------|
 | Organization          | PLATFORM_ADMIN | USER | PLATFORM_ADMIN | PLATFORM_ADMIN | PLATFORM_ADMIN |
 | Building              | USER       | USER     | PLATFORM_ADMIN | PLATFORM_ADMIN | PLATFORM_ADMIN |
-| Apartment             | USER       | USER     | ORG_ROLE_ADMIN | ORG_ROLE_ADMIN | ORG_ROLE_ADMIN |
-| User                  | MANAGER    | self     | PLATFORM_ADMIN | PLATFORM_ADMIN/self | PLATFORM_ADMIN |
-| Resident              | USER       | USER     | ORG_ROLE_ADMIN | ORG_ROLE_ADMIN | ORG_ROLE_ADMIN |
+| Apartment             | USER       | USER     | PLATFORM_ADMIN | PLATFORM_ADMIN | PLATFORM_ADMIN |
+| User                  | MANAGER    | PA/self  | PLATFORM_ADMIN | PLATFORM_ADMIN/self | PLATFORM_ADMIN |
+| Resident              | USER       | USER     | PLATFORM_ADMIN | PA or ORG_ADMIN* | PLATFORM_ADMIN |
 | ConnectionRequest     | USER       | USER     | USER           | ORG_ROLE_ADMIN | —              |
 | OrganizationMembership| USER       | USER     | ORG_ROLE_ADMIN | ORG_ROLE_ADMIN | PLATFORM_ADMIN |
 | Request               | USER       | USER     | RESIDENT       | MANAGER        | ADMIN          |
@@ -110,9 +110,9 @@ ROLE_PLATFORM_ADMIN > ROLE_ADMIN > ROLE_MANAGER > ROLE_RESIDENT > ROLE_USER
 
 ### State Processors (`src/State/`)
 
-- **UserPasswordHasher** — hashes `plainPassword` on User POST/PATCH
+- **UserPasswordHasher** — hashes `plainPassword` on User POST/PATCH; prevents non-platform-admins from changing roles
 - **ConnectionRequestProcessor** — POST: auto-sets user from JWT, validates building→org and apartment→building; PATCH: admin approves (links resident.user) or rejects
-- **ResidentProcessor** — DELETE: unlinks user before deletion
+- **ResidentProcessor** — DELETE: unlinks user before deletion; PATCH: org admins can only disconnect (set user=null), all other fields are protected
 - **RequestProcessor** — auto-sets `author` and `organization` from JWT on POST
 - **SurveyProcessor** — auto-sets `createdBy` from JWT on POST
 - **VoteProcessor** — auto-sets `user` from JWT on POST, calculates weight from Resident.ownedArea

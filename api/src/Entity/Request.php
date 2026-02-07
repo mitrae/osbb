@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
 use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
 use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
@@ -10,6 +11,7 @@ use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Delete;
+use App\Filter\RequestSearchFilter;
 use App\State\RequestProcessor;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -20,7 +22,9 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ORM\Entity]
 #[ORM\Table(name: '`request`')]
 #[ORM\HasLifecycleCallbacks]
-#[ApiFilter(SearchFilter::class, properties: ['status' => 'exact'])]
+#[ApiFilter(SearchFilter::class, properties: ['status' => 'exact', 'author' => 'exact'])]
+#[ApiFilter(OrderFilter::class, properties: ['createdAt'])]
+#[ApiFilter(RequestSearchFilter::class)]
 #[ApiResource(
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),

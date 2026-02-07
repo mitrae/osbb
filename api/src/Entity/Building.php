@@ -28,16 +28,16 @@ class Building
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['building:read', 'apartment:read', 'connection_request:read'])]
+    #[Groups(['building:read', 'apartment:read', 'connection_request:read', 'resident:read'])]
     private ?int $id = null;
 
     #[ORM\ManyToOne(targetEntity: Organization::class, inversedBy: 'buildings')]
     #[ORM\JoinColumn(nullable: false)]
-    #[Groups(['building:read', 'building:write'])]
+    #[Groups(['building:read', 'building:write', 'resident:read'])]
     private ?Organization $organization = null;
 
     #[ORM\Column(length: 500)]
-    #[Groups(['building:read', 'building:write', 'apartment:read', 'connection_request:read'])]
+    #[Groups(['building:read', 'building:write', 'apartment:read', 'connection_request:read', 'resident:read'])]
     private ?string $address = null;
 
     #[ORM\Column]

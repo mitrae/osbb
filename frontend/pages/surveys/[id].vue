@@ -13,6 +13,11 @@
           </span>
         </div>
         <p v-if="survey.description" style="margin-top:0.5rem;color:#666">{{ survey.description }}</p>
+        <div v-if="survey.propertyType" style="margin-top:0.5rem">
+          <span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:3px;font-size:0.8rem;font-weight:500" :style="survey.propertyType === 'parking' ? 'background:#fff3e0;color:#e65100' : 'background:#e3f2fd;color:#1565c0'">
+            {{ survey.propertyType === 'parking' ? 'Parking owners only' : 'Apartment owners only' }}
+          </span>
+        </div>
         <small style="color:#999">
           Created by {{ survey.createdBy?.firstName }} {{ survey.createdBy?.lastName }}
           on {{ new Date(survey.createdAt).toLocaleDateString() }}

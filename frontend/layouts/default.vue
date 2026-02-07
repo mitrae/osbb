@@ -10,6 +10,7 @@
           <NuxtLink to="/requests">Requests</NuxtLink>
           <NuxtLink to="/surveys">Surveys</NuxtLink>
           <NuxtLink to="/organizations">Organizations</NuxtLink>
+          <NuxtLink v-if="auth.isPlatformAdmin" to="/admin/users">Users</NuxtLink>
         </div>
         <div class="navbar-end">
           <NuxtLink to="/profile" class="user-name">{{ `${auth.user?.firstName} ${auth.user?.lastName}` }}</NuxtLink>

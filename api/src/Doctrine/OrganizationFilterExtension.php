@@ -83,6 +83,12 @@ class OrganizationFilterExtension implements QueryCollectionExtensionInterface, 
                 return;
             }
             if (!$orgId) {
+                // Allow users to query their own residents across all orgs
+                $request = $this->requestStack->getCurrentRequest();
+                $userFilter = $request?->query->get('user');
+                if ($user instanceof User && $userFilter === '/api/users/' . $user->getId()) {
+                    return;
+                }
                 if (!$isPlatformAdmin) {
                     $queryBuilder->andWhere('1 = 0');
                 }

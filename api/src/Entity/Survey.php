@@ -69,6 +69,11 @@ class Survey
     #[Groups(['survey:read', 'survey:write'])]
     private ?\DateTimeImmutable $endDate = null;
 
+    #[ORM\Column(length: 20, nullable: true)]
+    #[Assert\Choice(choices: ['apartment', 'parking', null])]
+    #[Groups(['survey:read', 'survey:write'])]
+    private ?string $propertyType = null;
+
     #[ORM\Column]
     #[Groups(['survey:read'])]
     private ?\DateTimeImmutable $createdAt = null;
@@ -162,6 +167,17 @@ class Survey
     public function setEndDate(?\DateTimeImmutable $endDate): static
     {
         $this->endDate = $endDate;
+        return $this;
+    }
+
+    public function getPropertyType(): ?string
+    {
+        return $this->propertyType;
+    }
+
+    public function setPropertyType(?string $propertyType): static
+    {
+        $this->propertyType = $propertyType;
         return $this;
     }
 

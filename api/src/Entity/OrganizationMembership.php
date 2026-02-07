@@ -30,6 +30,7 @@ use Symfony\Component\Serializer\Annotation\Groups;
 )]
 class OrganizationMembership
 {
+    public const ROLE_RESIDENT = 'ROLE_RESIDENT';
     public const ROLE_MANAGER = 'ROLE_MANAGER';
     public const ROLE_ADMIN = 'ROLE_ADMIN';
 

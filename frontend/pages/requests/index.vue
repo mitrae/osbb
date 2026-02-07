@@ -26,6 +26,15 @@
           <option value="closed">Closed</option>
         </select>
       </div>
+      <div class="form-group" style="margin:0;flex:1;min-width:200px">
+        <label style="font-size:0.85rem">Search</label>
+        <input v-model="searchQuery" type="text" placeholder="Title, name, email, phone, apt #..." @input="onSearchInput" />
+      </div>
+    </div>
+
+    <div v-if="authorFilter" class="card" style="padding:0.7rem 1rem;display:flex;align-items:center;justify-content:space-between;background:#e3f2fd">
+      <span>Showing requests by <strong>{{ authorName }}</strong></span>
+      <button class="btn" style="background:#fff;font-size:0.85rem" @click="clearAuthorFilter">Clear filter</button>
     </div>
 
     <div v-if="showForm && selectedOrgId" class="card">
@@ -69,6 +78,16 @@
         </p>
         <small style="color:#999">
           <span v-if="!selectedOrgId && req.organization?.name" style="font-weight:500;color:#555">{{ req.organization.name }} &middot; </span>
+          <template v-if="req.author">
+            <NuxtLink
+              v-if="canLinkAuthor && req.author.id && selectedOrgId"
+              :to="`/organizations/${selectedOrgId}/members/${req.author.id}`"
+              style="color:#1a73e8;text-decoration:none"
+              @click.stop
+            >{{ req.author.firstName }} {{ req.author.lastName }}</NuxtLink>
+            <span v-else>{{ req.author.firstName }} {{ req.author.lastName }}</span>
+            &middot;
+          </template>
           {{ new Date(req.createdAt).toLocaleDateString() }}
         </small>
       </NuxtLink>
@@ -80,6 +99,8 @@
 </template>
 
 <script setup lang="ts">
+const route = useRoute();
+const router = useRouter();
 const api = useApi();
 const auth = useAuthStore();
 const orgStore = useOrganizationStore();
@@ -89,11 +110,19 @@ const showForm = ref(false);
 const submitting = ref(false);
 const error = ref('');
 const statusFilter = ref('');
+const searchQuery = ref('');
+const authorFilter = ref('');
+const authorName = ref('');
+let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const form = reactive({ title: '', description: '', visibility: 'private' });
 
 const orgs = computed(() => orgStore.allOrgs);
 const selectedOrgId = ref<number | null>(null);
+
+const canLinkAuthor = computed(() => {
+  return auth.isPlatformAdmin || orgStore.isOrgManager;
+});
 
 const canCreate = computed(() => {
   if (auth.isPlatformAdmin) return true;
@@ -104,9 +133,21 @@ const canCreate = computed(() => {
   return orgStore.residentOrgs.some(r => r.orgId === selectedOrgId.value);
 });
 
+function clearAuthorFilter() {
+  authorFilter.value = '';
+  authorName.value = '';
+  router.replace({ query: {} });
+  loadRequests();
+}
+
 function onFilterChange() {
   showForm.value = false;
   loadRequests();
+}
+
+function onSearchInput() {
+  if (searchTimeout) clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => loadRequests(), 300);
 }
 
 function withOrgContext<T>(fn: () => Promise<T>, orgId?: number | null): Promise<T> {
@@ -123,8 +164,14 @@ async function loadRequests() {
   try {
     let url = '/api/requests';
     const params: string[] = [];
+    if (authorFilter.value) {
+      params.push(`author=/api/users/${authorFilter.value}`);
+    }
     if (statusFilter.value) {
       params.push(`status=${statusFilter.value}`);
+    }
+    if (searchQuery.value.trim()) {
+      params.push(`search=${encodeURIComponent(searchQuery.value.trim())}`);
     }
     if (params.length) {
       url += '?' + params.join('&');
@@ -155,15 +202,27 @@ async function createRequest() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (auth.isPlatformAdmin) {
-    // Platform admin defaults to "All Organizations"
     selectedOrgId.value = null;
   } else if (orgs.value.length > 0) {
     selectedOrgId.value = orgStore.currentOrgId && orgs.value.some(o => o.id === orgStore.currentOrgId)
       ? orgStore.currentOrgId
       : orgs.value[0].id;
   }
+
+  // Handle ?author=<userId> query param
+  const qAuthor = route.query.author;
+  if (qAuthor) {
+    authorFilter.value = String(qAuthor);
+    try {
+      const userData = await api.get<any>(`/api/users/${qAuthor}`);
+      authorName.value = `${userData.firstName} ${userData.lastName}`.trim();
+    } catch {
+      authorName.value = `User #${qAuthor}`;
+    }
+  }
+
   loadRequests();
 });
 </script>

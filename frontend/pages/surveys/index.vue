@@ -37,6 +37,14 @@
           <label>Description</label>
           <textarea v-model="form.description"></textarea>
         </div>
+        <div class="form-group">
+          <label>Property Type (voting scope)</label>
+          <select v-model="form.propertyType">
+            <option :value="null">All owners</option>
+            <option value="apartment">Apartment owners only</option>
+            <option value="parking">Parking owners only</option>
+          </select>
+        </div>
 
         <div style="margin:1rem 0">
           <h3 style="font-size:1rem;margin-bottom:0.5rem">Questions</h3>
@@ -72,6 +80,7 @@
         </p>
         <small style="color:#999">
           <span v-if="!selectedOrgId && survey.organization?.name" style="font-weight:500;color:#555">{{ survey.organization.name }} &middot; </span>
+          <span v-if="survey.propertyType" style="font-weight:500;color:#555">{{ survey.propertyType === 'parking' ? 'Parking owners' : 'Apartment owners' }} &middot; </span>
           {{ survey.questions?.length || 0 }} questions
           &middot; Created {{ new Date(survey.createdAt).toLocaleDateString() }}
         </small>
@@ -97,6 +106,7 @@ const activeFilter = ref('');
 const form = reactive({
   title: '',
   description: '',
+  propertyType: null as string | null,
   questions: [{ text: '', description: '' }] as { text: string; description: string }[],
 });
 
@@ -151,6 +161,7 @@ async function createSurvey() {
       api.post<any>('/api/surveys', {
         title: form.title,
         description: form.description,
+        propertyType: form.propertyType,
         isActive: true,
       })
     );
@@ -169,6 +180,7 @@ async function createSurvey() {
 
     form.title = '';
     form.description = '';
+    form.propertyType = null;
     form.questions = [{ text: '', description: '' }];
     showForm.value = false;
     await loadSurveys();

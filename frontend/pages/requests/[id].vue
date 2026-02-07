@@ -16,7 +16,14 @@
       <p style="margin:1rem 0;line-height:1.6">{{ request.description }}</p>
 
       <div style="font-size:0.9rem;color:#666;margin-top:1rem">
-        <p>Author: {{ request.author?.firstName }} {{ request.author?.lastName }}</p>
+        <p>Author:
+          <NuxtLink
+            v-if="request.author?.id && authorLinkOrg"
+            :to="`/organizations/${authorLinkOrg}/members/${request.author.id}`"
+            style="color:#1a73e8;text-decoration:none"
+          >{{ request.author.firstName }} {{ request.author.lastName }}</NuxtLink>
+          <span v-else>{{ request.author?.firstName }} {{ request.author?.lastName }}</span>
+        </p>
         <p v-if="request.assignee">Assignee: {{ request.assignee?.firstName }} {{ request.assignee?.lastName }}</p>
         <p>Created: {{ new Date(request.createdAt).toLocaleString() }}</p>
         <p>Updated: {{ new Date(request.updatedAt).toLocaleString() }}</p>
@@ -78,6 +85,11 @@ const statuses = ['open', 'in_progress', 'resolved', 'closed'];
 const commentBody = ref('');
 const commentError = ref('');
 const commentSubmitting = ref(false);
+
+const authorLinkOrg = computed(() => {
+  if (!org.isOrgManager && !auth.isPlatformAdmin) return null;
+  return request.value?.organization?.id || org.currentOrgId;
+});
 
 async function loadRequest() {
   loading.value = true;
