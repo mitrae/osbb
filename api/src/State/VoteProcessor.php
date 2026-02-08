@@ -29,12 +29,21 @@ final class VoteProcessor implements ProcessorInterface
             if (!$user instanceof User) {
                 throw new AccessDeniedHttpException('Only residents can vote.');
             }
-            $data->setUser($user);
 
-            // Validate user is a member of the survey's org (via membership or resident link)
             $survey = $data->getQuestion()?->getSurvey();
             $organization = $survey?->getOrganization();
             $propertyType = $survey?->getPropertyType();
+
+            // Check voting date range
+            $now = new \DateTimeImmutable();
+            $startDate = $survey?->getStartDate();
+            $endDate = $survey?->getEndDate();
+            if ($startDate && $now < $startDate) {
+                throw new AccessDeniedHttpException('Voting has not started yet.');
+            }
+            if ($endDate && $now > $endDate) {
+                throw new AccessDeniedHttpException('Voting period has ended.');
+            }
 
             if ($organization) {
                 $hasMembership = $this->em->getRepository(OrganizationMembership::class)->findOneBy([
@@ -81,6 +90,20 @@ final class VoteProcessor implements ProcessorInterface
 
                 $weight = $weightQb->getQuery()->getSingleScalarResult();
 
+                // Check for existing vote (re-vote)
+                $existingVote = $this->em->getRepository(SurveyVote::class)->findOneBy([
+                    'question' => $data->getQuestion(),
+                    'user' => $user,
+                ]);
+
+                if ($existingVote) {
+                    $existingVote->setVote($data->isVote());
+                    $existingVote->setWeight($weight ?: '0.00');
+                    $this->em->flush();
+                    return $existingVote;
+                }
+
+                $data->setUser($user);
                 $data->setWeight($weight ?: '0.00');
             }
         }

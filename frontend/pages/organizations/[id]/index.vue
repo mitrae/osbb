@@ -16,6 +16,7 @@
               <small style="color:#999">Created {{ new Date(organization.createdAt).toLocaleDateString() }}</small>
             </div>
             <div v-if="auth.isPlatformAdmin" style="display:flex;gap:0.5rem">
+              <NuxtLink :to="`/organizations/${route.params.id}/import`" class="btn" style="background:#ff9800;color:#fff;font-size:0.85rem">Import Registry</NuxtLink>
               <button class="btn" style="background:#e0e0e0;font-size:0.85rem" @click="startEditing">Edit</button>
               <button class="btn btn-danger" style="font-size:0.85rem" @click="deleteOrg">Delete</button>
             </div>
@@ -72,15 +73,30 @@
         </table>
       </div>
 
-      <!-- Admin links -->
-      <div v-if="isOrgAdmin" class="card">
-        <h2>Management</h2>
-        <div style="display:flex;gap:1rem;margin-top:0.5rem;flex-wrap:wrap">
-          <NuxtLink :to="`/organizations/${route.params.id}/requests`" class="btn btn-primary">Requests</NuxtLink>
-          <NuxtLink :to="`/organizations/${route.params.id}/members`" class="btn btn-primary">Manage Members</NuxtLink>
-          <NuxtLink :to="`/organizations/${route.params.id}/apartments`" class="btn btn-primary">Manage Apartments</NuxtLink>
-          <NuxtLink :to="`/organizations/${route.params.id}/connection-requests`" class="btn btn-primary">Connection Requests</NuxtLink>
-          <NuxtLink v-if="auth.isPlatformAdmin" :to="`/organizations/${route.params.id}/import`" class="btn btn-primary" style="background:#ff9800">Import Registry</NuxtLink>
+      <!-- Management widgets -->
+      <div v-if="isOrgAdmin" style="margin-bottom:1rem">
+        <h2 style="margin-bottom:0.5rem">Management</h2>
+        <div class="widget-grid">
+          <NuxtLink :to="`/organizations/${route.params.id}/requests`" class="widget-card">
+            <div class="widget-label">Requests</div>
+            <div class="widget-stat">{{ stats.requests }}</div>
+          </NuxtLink>
+          <NuxtLink :to="`/organizations/${route.params.id}/members`" class="widget-card">
+            <div class="widget-label">Members</div>
+            <div class="widget-stat">{{ stats.members }}</div>
+          </NuxtLink>
+          <NuxtLink :to="`/organizations/${route.params.id}/apartments`" class="widget-card">
+            <div class="widget-label">Apartments</div>
+            <div class="widget-stat">{{ stats.apartments }}</div>
+          </NuxtLink>
+          <NuxtLink :to="`/organizations/${route.params.id}/connection-requests`" class="widget-card">
+            <div class="widget-label">Connection Requests</div>
+            <div class="widget-stat">{{ stats.connectionRequests }}</div>
+          </NuxtLink>
+          <NuxtLink to="/surveys" class="widget-card">
+            <div class="widget-label">Surveys</div>
+            <div class="widget-stat">{{ stats.surveys }}</div>
+          </NuxtLink>
         </div>
       </div>
 
@@ -131,6 +147,7 @@ const buildings = ref<any[]>([]);
 const loading = ref(true);
 const error = ref('');
 const myResidents = ref<any[]>([]);
+const stats = reactive({ requests: 0, members: 0, apartments: 0, connectionRequests: 0, surveys: 0 });
 
 // Edit org state
 const editing = ref(false);
@@ -166,10 +183,21 @@ async function loadData() {
   loading.value = true;
   try {
     organization.value = await api.get(`/api/organizations/${orgId.value}`);
-    const [bData, rData] = await Promise.all([
+    const fetches: Promise<any>[] = [
       withOrgContext(() => api.get<any>('/api/buildings')),
       withOrgContext(() => api.get<any>(`/api/residents?user=/api/users/${auth.user!.id}`)),
-    ]);
+    ];
+    if (isOrgAdmin.value) {
+      fetches.push(
+        withOrgContext(() => api.get<any>('/api/requests?itemsPerPage=1')),
+        withOrgContext(() => api.get<any>('/api/organization_memberships?itemsPerPage=1')),
+        withOrgContext(() => api.get<any>('/api/apartments?itemsPerPage=1')),
+        withOrgContext(() => api.get<any>('/api/connection_requests?status=pending&itemsPerPage=1')),
+        withOrgContext(() => api.get<any>('/api/surveys?itemsPerPage=1')),
+      );
+    }
+    const results = await Promise.all(fetches);
+    const [bData, rData] = results;
     buildings.value = bData['hydra:member'] || bData.member || [];
     const resList = rData['hydra:member'] || rData.member || (Array.isArray(rData) ? rData : []);
     myResidents.value = resList.map((r: any) => {
@@ -183,6 +211,14 @@ async function loadData() {
         ownedArea: r.ownedArea,
       };
     });
+    if (isOrgAdmin.value) {
+      const count = (d: any) => d['hydra:totalItems'] ?? d['totalItems'] ?? (d['hydra:member'] || d.member || []).length;
+      stats.requests = count(results[2]);
+      stats.members = count(results[3]);
+      stats.apartments = count(results[4]);
+      stats.connectionRequests = count(results[5]);
+      stats.surveys = count(results[6]);
+    }
   } catch {
     // handle error
   } finally {
@@ -287,5 +323,35 @@ onMounted(loadData);
 }
 .residency-table tr:last-child td {
   border-bottom: none;
+}
+.widget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1rem;
+}
+.widget-card {
+  display: block;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.15s, border-color 0.15s;
+  text-align: center;
+}
+.widget-card:hover {
+  border-color: #1a73e8;
+  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.15);
+}
+.widget-label {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 0.3rem;
+}
+.widget-stat {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a73e8;
 }
 </style>

@@ -37,7 +37,7 @@ class OrganizationMembership
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['membership:read'])]
+    #[Groups(['membership:read', 'user:read'])]
     private ?int $id = null;
 
     #[ORM\ManyToOne(targetEntity: User::class, inversedBy: 'memberships')]
@@ -47,11 +47,11 @@ class OrganizationMembership
 
     #[ORM\ManyToOne(targetEntity: Organization::class, inversedBy: 'memberships')]
     #[ORM\JoinColumn(nullable: false)]
-    #[Groups(['membership:read', 'membership:write'])]
+    #[Groups(['membership:read', 'membership:write', 'user:read'])]
     private ?Organization $organization = null;
 
     #[ORM\Column(length: 30)]
-    #[Groups(['membership:read', 'membership:write'])]
+    #[Groups(['membership:read', 'membership:write', 'user:read'])]
     private string $role = self::ROLE_ADMIN;
 
     #[ORM\Column]

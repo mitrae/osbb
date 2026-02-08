@@ -16,7 +16,7 @@ use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity]
-#[ApiFilter(SearchFilter::class, properties: ['user' => 'exact'])]
+#[ApiFilter(SearchFilter::class, properties: ['user' => 'exact', 'apartment' => 'exact'])]
 #[ApiResource(
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),

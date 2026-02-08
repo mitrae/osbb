@@ -2,6 +2,8 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
@@ -9,12 +11,10 @@ use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Delete;
 use App\State\VoteProcessor;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Serializer\Annotation\Groups;
 
 #[ORM\Entity]
-#[ORM\UniqueConstraint(name: 'unique_vote', columns: ['question_id', 'user_id'])]
-#[UniqueEntity(fields: ['question', 'user'], message: 'You have already voted on this question.')]
+#[ApiFilter(SearchFilter::class, properties: ['question' => 'exact'])]
 #[ApiResource(
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),

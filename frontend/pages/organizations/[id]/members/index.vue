@@ -4,6 +4,68 @@
 
     <h1 style="margin-top:1rem">{{ orgName ? `${orgName} — Members` : 'Members' }}</h1>
 
+    <!-- Add Member -->
+    <div v-if="isOrgAdmin && !showAddForm" style="margin-bottom:1rem">
+      <button class="btn btn-primary" @click="showAddForm = true">+ Add Member</button>
+    </div>
+
+    <div v-if="showAddForm" class="card" style="margin-bottom:1rem">
+      <h3 style="margin-top:0">Add Member</h3>
+      <div style="display:flex;gap:0.5rem;align-items:end;flex-wrap:wrap">
+        <div class="form-group" style="margin:0;flex:1;min-width:200px">
+          <label style="font-size:0.85rem">Search users</label>
+          <input
+            v-model="userSearch"
+            type="text"
+            placeholder="Type name or email..."
+            @input="searchUsers"
+            class="search-input"
+            style="margin-bottom:0"
+          />
+        </div>
+        <div class="form-group" style="margin:0;min-width:120px">
+          <label style="font-size:0.85rem">Role</label>
+          <select v-model="newMemberRole" class="role-select">
+            <option value="ROLE_MANAGER">Manager</option>
+            <option value="ROLE_ADMIN">Admin</option>
+          </select>
+        </div>
+      </div>
+
+      <div v-if="userSearchResults.length > 0" class="search-results">
+        <div
+          v-for="u in userSearchResults"
+          :key="u.id"
+          class="search-result-item"
+          :class="{ selected: selectedUser?.id === u.id }"
+          @click="selectedUser = u"
+        >
+          <strong>{{ u.firstName }} {{ u.lastName }}</strong>
+          <span class="email">{{ u.email }}</span>
+        </div>
+      </div>
+      <div v-else-if="userSearch.length >= 2 && !searchingUsers" style="font-size:0.85rem;color:#666;margin-top:0.5rem">
+        No users found.
+      </div>
+      <div v-if="searchingUsers" style="font-size:0.85rem;color:#666;margin-top:0.5rem">
+        Searching...
+      </div>
+
+      <div v-if="selectedUser" style="margin-top:0.75rem;padding:0.5rem 0.75rem;background:#f0f7ff;border-radius:6px;display:flex;justify-content:space-between;align-items:center">
+        <span>
+          Selected: <strong>{{ selectedUser.firstName }} {{ selectedUser.lastName }}</strong> ({{ selectedUser.email }})
+        </span>
+        <button class="btn btn-primary" style="font-size:0.85rem" @click="addMember" :disabled="addingMember">
+          {{ addingMember ? 'Adding...' : 'Add' }}
+        </button>
+      </div>
+
+      <div style="margin-top:0.75rem">
+        <button class="btn" style="background:#e0e0e0;font-size:0.85rem" @click="cancelAdd">Cancel</button>
+      </div>
+      <p v-if="addError" class="error" style="margin-top:0.5rem">{{ addError }}</p>
+    </div>
+
     <div class="card" v-if="!loading">
       <div class="filters">
         <input
@@ -25,6 +87,7 @@
             <th>Phone</th>
             <th>Apartment</th>
             <th>Role</th>
+            <th v-if="auth.isPlatformAdmin"></th>
           </tr>
         </thead>
         <tbody>
@@ -58,6 +121,13 @@
                 <option value="ROLE_ADMIN">Admin</option>
               </select>
             </td>
+            <td v-if="auth.isPlatformAdmin">
+              <button
+                class="btn btn-danger"
+                style="font-size:0.75rem;padding:0.2rem 0.5rem"
+                @click="removeMember(m)"
+              >Remove</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -66,12 +136,14 @@
     <div class="card" v-else>Loading...</div>
 
     <p v-if="error" class="error">{{ error }}</p>
+    <p v-if="success" class="success">{{ success }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
 const route = useRoute();
 const api = useApi();
+const auth = useAuthStore();
 const orgStore = useOrganizationStore();
 
 const allMembers = ref<any[]>([]);
@@ -79,8 +151,35 @@ const buildings = ref<any[]>([]);
 const orgName = ref('');
 const loading = ref(true);
 const error = ref('');
+const success = ref('');
 const search = ref('');
 const selectedBuildingId = ref<number | null>(null);
+
+// Add member state
+const showAddForm = ref(false);
+const userSearch = ref('');
+const userSearchResults = ref<any[]>([]);
+const searchingUsers = ref(false);
+const selectedUser = ref<any>(null);
+const newMemberRole = ref('ROLE_MANAGER');
+const addingMember = ref(false);
+const addError = ref('');
+let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const orgId = computed(() => Number(route.params.id));
+
+const membership = computed(() =>
+  orgStore.memberships.find((m) => m.organization.id === orgId.value)
+);
+
+const isOrgAdmin = computed(() => {
+  if (auth.isPlatformAdmin) return true;
+  return membership.value?.role === 'ROLE_ADMIN';
+});
+
+const existingUserIds = computed(() =>
+  new Set(allMembers.value.map((m) => m.userId).filter(Boolean))
+);
 
 const filtered = computed(() => {
   let list = allMembers.value;
@@ -102,16 +201,23 @@ const filtered = computed(() => {
   return list;
 });
 
+function withOrgContext<T>(fn: () => Promise<T>): Promise<T> {
+  const savedOrg = orgStore.currentOrgId;
+  orgStore.setCurrentOrg(orgId.value);
+  return fn().finally(() => {
+    if (savedOrg) orgStore.setCurrentOrg(savedOrg);
+  });
+}
+
 async function loadData() {
   loading.value = true;
-  const orgId = Number(route.params.id);
   const savedOrg = orgStore.currentOrgId;
-  orgStore.setCurrentOrg(orgId);
+  orgStore.setCurrentOrg(orgId.value);
 
   try {
     // Load core data (org info + memberships)
     const [orgData, membData] = await Promise.all([
-      api.get<any>(`/api/organizations/${orgId}`),
+      api.get<any>(`/api/organizations/${orgId.value}`),
       api.get<any>('/api/organization_memberships'),
     ]);
 
@@ -182,6 +288,89 @@ async function updateRole(id: number, role: string) {
   error.value = '';
   try {
     await api.patch(`/api/organization_memberships/${id}`, { role });
+    await loadData();
+  } catch (e: any) {
+    error.value = e.message;
+  }
+}
+
+function searchUsers() {
+  selectedUser.value = null;
+  if (searchTimeout) clearTimeout(searchTimeout);
+
+  if (userSearch.value.length < 2) {
+    userSearchResults.value = [];
+    return;
+  }
+
+  searchTimeout = setTimeout(async () => {
+    searchingUsers.value = true;
+    try {
+      const q = encodeURIComponent(userSearch.value);
+      // SearchFilter uses AND between fields, so search each independently and merge
+      const [byEmail, byFirst, byLast] = await Promise.all([
+        api.get<any>(`/api/users?email=${q}`),
+        api.get<any>(`/api/users?firstName=${q}`),
+        api.get<any>(`/api/users?lastName=${q}`),
+      ]);
+      const extract = (d: any) => d['hydra:member'] || d['member'] || [];
+      const seen = new Set<number>();
+      const merged: any[] = [];
+      for (const u of [...extract(byEmail), ...extract(byFirst), ...extract(byLast)]) {
+        if (!seen.has(u.id)) {
+          seen.add(u.id);
+          merged.push(u);
+        }
+      }
+      // Filter out users already in the org
+      userSearchResults.value = merged.filter((u: any) => !existingUserIds.value.has(u.id));
+    } catch {
+      userSearchResults.value = [];
+    } finally {
+      searchingUsers.value = false;
+    }
+  }, 300);
+}
+
+async function addMember() {
+  if (!selectedUser.value) return;
+  addingMember.value = true;
+  addError.value = '';
+  try {
+    await withOrgContext(() =>
+      api.post('/api/organization_memberships', {
+        user: `/api/users/${selectedUser.value.id}`,
+        organization: `/api/organizations/${orgId.value}`,
+        role: newMemberRole.value,
+      })
+    );
+    cancelAdd();
+    success.value = 'Member added';
+    setTimeout(() => { success.value = ''; }, 2000);
+    await loadData();
+  } catch (e: any) {
+    addError.value = e.message;
+  } finally {
+    addingMember.value = false;
+  }
+}
+
+function cancelAdd() {
+  showAddForm.value = false;
+  userSearch.value = '';
+  userSearchResults.value = [];
+  selectedUser.value = null;
+  newMemberRole.value = 'ROLE_MANAGER';
+  addError.value = '';
+}
+
+async function removeMember(m: any) {
+  if (!confirm(`Remove ${m.userName} from this organization?`)) return;
+  error.value = '';
+  try {
+    await api.delete(`/api/organization_memberships/${m.id}`);
+    success.value = 'Member removed';
+    setTimeout(() => { success.value = ''; }, 2000);
     await loadData();
   } catch (e: any) {
     error.value = e.message;
@@ -262,5 +451,34 @@ onMounted(loadData);
 .role-badge.resident {
   background: #e8f5e9;
   color: #2e7d32;
+}
+.search-results {
+  margin-top: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.search-result-item {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+}
+.search-result-item:last-child {
+  border-bottom: none;
+}
+.search-result-item:hover {
+  background: #f5f5f5;
+}
+.search-result-item.selected {
+  background: #e3f2fd;
+}
+.success {
+  color: #2e7d32;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
 }
 </style>

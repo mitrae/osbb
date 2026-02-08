@@ -15,6 +15,7 @@ use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
+use Symfony\Component\Serializer\Annotation\SerializedName;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity]
@@ -59,13 +60,16 @@ class Survey
 
     #[ORM\Column]
     #[Groups(['survey:read', 'survey:write'])]
+    #[SerializedName('isActive')]
     private bool $isActive = true;
 
-    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    #[ORM\Column(type: 'datetime_immutable')]
+    #[Assert\NotNull]
     #[Groups(['survey:read', 'survey:write'])]
     private ?\DateTimeImmutable $startDate = null;
 
-    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    #[ORM\Column(type: 'datetime_immutable')]
+    #[Assert\NotNull]
     #[Groups(['survey:read', 'survey:write'])]
     private ?\DateTimeImmutable $endDate = null;
 
@@ -137,7 +141,7 @@ class Survey
         return $this;
     }
 
-    public function isActive(): bool
+    public function getIsActive(): bool
     {
         return $this->isActive;
     }

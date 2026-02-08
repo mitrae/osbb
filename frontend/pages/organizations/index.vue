@@ -47,6 +47,21 @@
       </div>
     </div>
 
+    <!-- My Connection Requests -->
+    <div v-if="!auth.isPlatformAdmin && myRequests.length > 0" class="card">
+      <h2>My Connection Requests</h2>
+      <div v-for="cr in myRequests" :key="cr.id" class="list-item">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <strong>{{ cr.orgName }}</strong>
+            <span style="display:block;font-size:0.85rem;color:#666">{{ cr.buildingAddress }} &mdash; {{ cr.aptLabel }}</span>
+            <small style="color:#999">{{ new Date(cr.createdAt).toLocaleDateString() }}</small>
+          </div>
+          <span :class="`badge badge-${cr.status}`">{{ cr.status }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Apply for Residency (regular users) -->
     <div v-if="!auth.isPlatformAdmin" class="card" style="margin-top:1.5rem">
       <div v-if="!showApply" style="text-align:center;padding:1rem 0">
@@ -77,20 +92,57 @@
             </select>
           </div>
 
-          <div class="form-group">
+          <div class="form-group autocomplete-wrap">
             <label>Building</label>
-            <select v-model="apply.buildingId" required @change="onApplyBuildingChange" :disabled="!apply.organizationId">
-              <option value="" disabled>{{ apply.organizationId ? 'Select building' : 'Select organization first' }}</option>
-              <option v-for="b in applyBuildings" :key="b.id" :value="b.id">{{ b.address }}</option>
-            </select>
+            <div v-if="selectedBuilding" class="selected-tag">
+              {{ selectedBuilding.address }}
+              <button type="button" @click="clearBuilding">&times;</button>
+            </div>
+            <template v-else>
+              <input
+                v-model="buildingSearch"
+                type="text"
+                :placeholder="apply.organizationId ? 'Type to search building address...' : 'Select organization first'"
+                :disabled="!apply.organizationId"
+                autocomplete="off"
+                @input="onBuildingInput"
+                @focus="onBuildingFocus"
+              />
+              <ul v-if="buildingDropdownOpen && filteredBuildings.length > 0" class="autocomplete-dropdown">
+                <li v-for="b in filteredBuildings" :key="b.id" @mousedown.prevent="selectBuilding(b)">{{ b.address }}</li>
+              </ul>
+              <div v-if="buildingDropdownOpen && buildingSearch && filteredBuildings.length === 0 && !buildingLoading" class="autocomplete-dropdown" style="padding:0.5rem;color:#999;font-size:0.85rem">
+                No buildings found
+              </div>
+            </template>
           </div>
 
-          <div class="form-group">
+          <div class="form-group autocomplete-wrap">
             <label>Apartment</label>
-            <select v-model="apply.apartmentId" required :disabled="!apply.buildingId">
-              <option value="" disabled>{{ apply.buildingId ? 'Select apartment' : 'Select building first' }}</option>
-              <option v-for="a in applyApartments" :key="a.id" :value="a.id">Apt #{{ a.number }} ({{ a.totalArea }} m2)</option>
-            </select>
+            <div v-if="selectedApartment" class="selected-tag">
+              {{ selectedApartment.type === 'parking' ? 'Parking' : 'Apt' }} #{{ selectedApartment.number }} ({{ selectedApartment.totalArea }} m&sup2;)
+              <button type="button" @click="clearApartment">&times;</button>
+            </div>
+            <template v-else>
+              <input
+                v-model="aptSearch"
+                type="text"
+                :placeholder="apply.buildingId ? 'Type apartment number...' : 'Select building first'"
+                :disabled="!apply.buildingId"
+                autocomplete="off"
+                @input="onAptInput"
+                @focus="onAptFocus"
+              />
+              <ul v-if="aptDropdownOpen && filteredApartments.length > 0" class="autocomplete-dropdown">
+                <li v-for="a in filteredApartments" :key="a.id" @mousedown.prevent="selectApartment(a)">
+                  {{ a.type === 'parking' ? 'Parking' : 'Apt' }} #{{ a.number }} ({{ a.totalArea }} m&sup2;)
+                </li>
+                <li v-if="!aptSearch && filteredApartments.length >= 20" class="autocomplete-hint">Type number to narrow results...</li>
+              </ul>
+              <div v-if="aptDropdownOpen && aptSearch && filteredApartments.length === 0 && !aptLoading" class="autocomplete-dropdown" style="padding:0.5rem;color:#999;font-size:0.85rem">
+                No apartments found
+              </div>
+            </template>
           </div>
 
           <div class="form-group">
@@ -145,6 +197,8 @@ const creating = ref(false);
 const createError = ref('');
 const newOrg = reactive({ name: '', city: '', address: '' });
 
+const myRequests = ref<any[]>([]);
+
 const connectedOrgIds = computed(() => new Set(org.allOrgs.map(o => o.id)));
 const availableOrgs = computed(() => allOrganizations.value.filter(o => !connectedOrgIds.value.has(o.id)));
 
@@ -153,8 +207,6 @@ const showApply = ref(false);
 const applySubmitting = ref(false);
 const applySubmitted = ref(false);
 const applyError = ref('');
-const applyBuildings = ref<any[]>([]);
-const applyApartments = ref<any[]>([]);
 const apply = reactive({
   organizationId: '',
   buildingId: '',
@@ -163,51 +215,142 @@ const apply = reactive({
   phone: '',
 });
 
-async function onApplyOrgChange() {
-  apply.buildingId = '';
-  apply.apartmentId = '';
-  applyBuildings.value = [];
-  applyApartments.value = [];
-  if (!apply.organizationId) return;
+// Building autocomplete
+const buildingSearch = ref('');
+const buildingDropdownOpen = ref(false);
+const buildingLoading = ref(false);
+const buildingResults = ref<any[]>([]);
+const selectedBuilding = ref<any>(null);
+let buildingDebounce: ReturnType<typeof setTimeout> | null = null;
 
+const filteredBuildings = computed(() => buildingResults.value);
+
+function onBuildingFocus() {
+  buildingDropdownOpen.value = true;
+  if (buildingResults.value.length === 0) fetchBuildings();
+}
+
+function onBuildingInput() {
+  if (selectedBuilding.value) return;
+  if (buildingDebounce) clearTimeout(buildingDebounce);
+  buildingDebounce = setTimeout(() => fetchBuildings(), 300);
+}
+
+async function fetchBuildings() {
+  if (!apply.organizationId) return;
+  buildingLoading.value = true;
   try {
     const savedOrg = org.currentOrgId;
     org.setCurrentOrg(Number(apply.organizationId));
-    const data = await api.get<any>('/api/buildings');
-    applyBuildings.value = data['hydra:member'] || data.member || [];
+    const params = new URLSearchParams({ pagination: 'false' });
+    if (buildingSearch.value.trim()) params.set('address', buildingSearch.value.trim());
+    const data = await api.get<any>(`/api/buildings?${params}`);
+    buildingResults.value = Array.isArray(data) ? data : (data['hydra:member'] || data.member || []);
     if (savedOrg) org.setCurrentOrg(savedOrg);
-
-    if (applyBuildings.value.length === 1) {
-      apply.buildingId = applyBuildings.value[0].id;
-      await onApplyBuildingChange();
-    }
   } catch {
-    // ignore
+    buildingResults.value = [];
+  } finally {
+    buildingLoading.value = false;
   }
 }
 
-async function onApplyBuildingChange() {
-  apply.apartmentId = '';
-  applyApartments.value = [];
-  if (!apply.buildingId) return;
+function selectBuilding(b: any) {
+  selectedBuilding.value = b;
+  apply.buildingId = b.id;
+  buildingSearch.value = '';
+  buildingDropdownOpen.value = false;
+  // Clear apartment selection
+  clearApartment();
+  // Pre-load apartments for this building
+  fetchApartments();
+}
 
+function clearBuilding() {
+  selectedBuilding.value = null;
+  apply.buildingId = '';
+  buildingSearch.value = '';
+  buildingResults.value = [];
+  clearApartment();
+}
+
+// Apartment autocomplete
+const aptSearch = ref('');
+const aptDropdownOpen = ref(false);
+const aptLoading = ref(false);
+const aptResults = ref<any[]>([]);
+const selectedApartment = ref<any>(null);
+let aptDebounce: ReturnType<typeof setTimeout> | null = null;
+
+const filteredApartments = computed(() => aptResults.value);
+
+function onAptFocus() {
+  aptDropdownOpen.value = true;
+  if (aptResults.value.length === 0 && apply.buildingId) fetchApartments();
+}
+
+function onAptInput() {
+  if (selectedApartment.value) return;
+  if (aptDebounce) clearTimeout(aptDebounce);
+  aptDebounce = setTimeout(() => fetchApartments(), 300);
+}
+
+async function fetchApartments() {
+  if (!apply.buildingId) return;
+  aptLoading.value = true;
   try {
     const savedOrg = org.currentOrgId;
     org.setCurrentOrg(Number(apply.organizationId));
-    const data = await api.get<any>('/api/apartments');
-    const allApts = data['hydra:member'] || data.member || [];
-    applyApartments.value = allApts.filter((a: any) => {
-      const bRef = typeof a.building === 'string' ? a.building : a.building?.['@id'] || `/api/buildings/${a.building?.id}`;
-      return bRef === `/api/buildings/${apply.buildingId}`;
+    const params = new URLSearchParams({
+      'building': `/api/buildings/${apply.buildingId}`,
     });
+    if (aptSearch.value.trim()) {
+      params.set('number', aptSearch.value.trim());
+      params.set('pagination', 'false');
+    } else {
+      params.set('itemsPerPage', '20');
+    }
+    const data = await api.get<any>(`/api/apartments?${params}`);
+    aptResults.value = Array.isArray(data) ? data : (data['hydra:member'] || data.member || []);
     if (savedOrg) org.setCurrentOrg(savedOrg);
   } catch {
-    // ignore
+    aptResults.value = [];
+  } finally {
+    aptLoading.value = false;
+  }
+}
+
+function selectApartment(a: any) {
+  selectedApartment.value = a;
+  apply.apartmentId = a.id;
+  aptSearch.value = '';
+  aptDropdownOpen.value = false;
+}
+
+function clearApartment() {
+  selectedApartment.value = null;
+  apply.apartmentId = '';
+  aptSearch.value = '';
+  aptResults.value = [];
+}
+
+async function onApplyOrgChange() {
+  apply.buildingId = '';
+  apply.apartmentId = '';
+  clearBuilding();
+  if (!apply.organizationId) return;
+  // Pre-load buildings for the selected org
+  await fetchBuildings();
+  if (buildingResults.value.length === 1) {
+    selectBuilding(buildingResults.value[0]);
   }
 }
 
 async function submitApply() {
   applyError.value = '';
+  if (!apply.buildingId || !apply.apartmentId) {
+    applyError.value = 'Please select a building and apartment.';
+    return;
+  }
   applySubmitting.value = true;
   try {
     await api.post('/api/connection_requests', {
@@ -219,10 +362,10 @@ async function submitApply() {
     });
     applySubmitted.value = true;
     apply.organizationId = '';
-    apply.buildingId = '';
-    apply.apartmentId = '';
     apply.fullName = '';
     apply.phone = '';
+    clearBuilding();
+    await loadMyRequests();
   } catch (e: any) {
     applyError.value = e.message;
   } finally {
@@ -250,15 +393,55 @@ async function createOrg() {
   }
 }
 
-onMounted(async () => {
+function closeDropdowns(e: Event) {
+  const target = e.target as HTMLElement;
+  if (!target.closest('.autocomplete-wrap')) {
+    buildingDropdownOpen.value = false;
+    aptDropdownOpen.value = false;
+  }
+}
+
+async function loadMyRequests() {
+  if (auth.isPlatformAdmin) return;
   try {
-    const data = await api.get<any>('/api/organizations');
-    allOrganizations.value = Array.isArray(data) ? data : (data['hydra:member'] || data.member || []);
+    const data = await api.get<any>('/api/connection_requests');
+    const items = Array.isArray(data) ? data : (data['hydra:member'] || data.member || []);
+    myRequests.value = items.map((cr: any) => {
+      const orgObj = typeof cr.organization === 'object' ? cr.organization : null;
+      const bldObj = typeof cr.building === 'object' ? cr.building : null;
+      const aptObj = typeof cr.apartment === 'object' ? cr.apartment : null;
+      const aptType = aptObj?.type || 'apartment';
+      return {
+        id: cr.id,
+        status: cr.status,
+        createdAt: cr.createdAt,
+        orgName: orgObj?.name || 'Organization',
+        buildingAddress: bldObj?.address || '',
+        aptLabel: `${aptType === 'parking' ? 'Parking' : 'Apt'} #${aptObj?.number || '?'}`,
+      };
+    });
+  } catch {
+    // ignore
+  }
+}
+
+onMounted(async () => {
+  document.addEventListener('click', closeDropdowns);
+  try {
+    const [orgData] = await Promise.all([
+      api.get<any>('/api/organizations'),
+      loadMyRequests(),
+    ]);
+    allOrganizations.value = Array.isArray(orgData) ? orgData : (orgData['hydra:member'] || orgData.member || []);
   } catch {
     // ignore
   } finally {
     loading.value = false;
   }
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeDropdowns);
 });
 </script>
 
@@ -269,5 +452,62 @@ onMounted(async () => {
 }
 .list-item:last-child {
   border-bottom: none;
+}
+.autocomplete-wrap {
+  position: relative;
+}
+.autocomplete-dropdown {
+  position: absolute;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.autocomplete-dropdown li {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.autocomplete-dropdown li:hover {
+  background: #e3f2fd;
+}
+.autocomplete-dropdown li.autocomplete-hint {
+  color: #999;
+  font-size: 0.8rem;
+  font-style: italic;
+  cursor: default;
+  border-top: 1px solid #eee;
+}
+.autocomplete-dropdown li.autocomplete-hint:hover {
+  background: transparent;
+}
+.selected-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  background: #e3f2fd;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #1565c0;
+}
+.selected-tag button {
+  background: none;
+  border: none;
+  color: #1565c0;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0;
+  line-height: 1;
 }
 </style>

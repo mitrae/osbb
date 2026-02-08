@@ -2,6 +2,8 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
@@ -21,6 +23,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ORM\Entity]
 #[ORM\Table(name: '`user`')]
 #[UniqueEntity('email')]
+#[ApiFilter(SearchFilter::class, properties: ['email' => 'partial', 'firstName' => 'partial', 'lastName' => 'partial'])]
 #[ApiResource(
     operations: [
         new GetCollection(security: "is_granted('ROLE_MANAGER')"),
@@ -75,6 +78,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     private ?\DateTimeImmutable $createdAt = null;
 
     #[ORM\OneToMany(mappedBy: 'user', targetEntity: OrganizationMembership::class)]
+    #[Groups(['user:read'])]
     private Collection $memberships;
 
     public function __construct()

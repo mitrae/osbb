@@ -8,6 +8,22 @@ use App\Tests\ApiTestCase;
 
 class SurveyVoteTest extends ApiTestCase
 {
+    private function createSurveyEntity($org, $admin, array $extra = []): Survey
+    {
+        $em = $this->getEntityManager();
+        $survey = new Survey();
+        $survey->setTitle($extra['title'] ?? 'Test Survey');
+        $survey->setOrganization($org);
+        $survey->setCreatedBy($admin);
+        $survey->setStartDate(new \DateTimeImmutable('-1 day'));
+        $survey->setEndDate(new \DateTimeImmutable('+30 days'));
+        if (isset($extra['propertyType'])) {
+            $survey->setPropertyType($extra['propertyType']);
+        }
+        $em->persist($survey);
+        return $survey;
+    }
+
     public function testOrgAdminCanCreateSurvey(): void
     {
         $admin = $this->createUser('survadmin@test.com');
@@ -20,13 +36,14 @@ class SurveyVoteTest extends ApiTestCase
                 'title' => 'Annual Budget',
                 'description' => 'Vote on the 2026 budget',
                 'organization' => '/api/organizations/' . $org->getId(),
+                'startDate' => '2026-01-01T00:00:00+00:00',
+                'endDate' => '2026-12-31T23:59:59+00:00',
             ],
         ]);
 
         $this->assertResponseStatusCodeSame(201);
         $data = $response->toArray();
         $this->assertSame('Annual Budget', $data['title']);
-        // isActive defaults to true but may not be in JSON response if not requested
         if (array_key_exists('isActive', $data)) {
             $this->assertTrue($data['isActive']);
         }
@@ -38,13 +55,8 @@ class SurveyVoteTest extends ApiTestCase
         [$org] = $this->createOrgStructure();
         $this->createMembership($admin, $org, 'ROLE_ADMIN');
 
-        $em = $this->getEntityManager();
-        $survey = new Survey();
-        $survey->setTitle('Test Survey');
-        $survey->setOrganization($org);
-        $survey->setCreatedBy($admin);
-        $em->persist($survey);
-        $em->flush();
+        $survey = $this->createSurveyEntity($org, $admin);
+        $this->getEntityManager()->flush();
 
         $client = $this->createOrgClient('survq@test.com', $org->getId());
         $response = $client->request('POST', '/api/survey_questions', [
@@ -68,11 +80,7 @@ class SurveyVoteTest extends ApiTestCase
         $this->createResident($apartment, 'Voter', 'Person', '35.50', $voter);
 
         $em = $this->getEntityManager();
-        $survey = new Survey();
-        $survey->setTitle('Vote Survey');
-        $survey->setOrganization($org);
-        $survey->setCreatedBy($admin);
-        $em->persist($survey);
+        $survey = $this->createSurveyEntity($org, $admin, ['title' => 'Vote Survey']);
 
         $question = new SurveyQuestion();
         $question->setSurvey($survey);
@@ -102,11 +110,7 @@ class SurveyVoteTest extends ApiTestCase
         $this->createResident($apartment, 'Weight', 'Voter', '45.75', $voter);
 
         $em = $this->getEntityManager();
-        $survey = new Survey();
-        $survey->setTitle('Weight Survey');
-        $survey->setOrganization($org);
-        $survey->setCreatedBy($admin);
-        $em->persist($survey);
+        $survey = $this->createSurveyEntity($org, $admin, ['title' => 'Weight Survey']);
 
         $question = new SurveyQuestion();
         $question->setSurvey($survey);
@@ -127,7 +131,7 @@ class SurveyVoteTest extends ApiTestCase
         $this->assertSame('45.75', $data['weight']);
     }
 
-    public function testDuplicateVoteFails(): void
+    public function testReVoteUpdatesExistingVote(): void
     {
         $admin = $this->createUser('vdup_admin@test.com');
         $voter = $this->createUser('vdup_voter@test.com');
@@ -136,11 +140,7 @@ class SurveyVoteTest extends ApiTestCase
         $this->createResident($apartment, 'Dup', 'Voter', '20.00', $voter);
 
         $em = $this->getEntityManager();
-        $survey = new Survey();
-        $survey->setTitle('Dup Survey');
-        $survey->setOrganization($org);
-        $survey->setCreatedBy($admin);
-        $em->persist($survey);
+        $survey = $this->createSurveyEntity($org, $admin, ['title' => 'Dup Survey']);
 
         $question = new SurveyQuestion();
         $question->setSurvey($survey);
@@ -150,24 +150,28 @@ class SurveyVoteTest extends ApiTestCase
 
         $client = $this->createOrgClient('vdup_voter@test.com', $org->getId());
 
-        // First vote succeeds
-        $client->request('POST', '/api/survey_votes', [
+        // First vote: Yes
+        $response = $client->request('POST', '/api/survey_votes', [
             'json' => [
                 'question' => '/api/survey_questions/' . $question->getId(),
                 'vote' => true,
             ],
         ]);
         $this->assertResponseStatusCodeSame(201);
+        $data = $response->toArray();
+        $this->assertTrue($data['vote']);
 
-        // Second vote fails (unique constraint — user is set by processor after validation)
-        $client->request('POST', '/api/survey_votes', [
+        // Re-vote: No — should succeed and update the existing vote
+        $response = $client->request('POST', '/api/survey_votes', [
             'json' => [
                 'question' => '/api/survey_questions/' . $question->getId(),
                 'vote' => false,
             ],
         ]);
-        // May be 422 (if validator catches) or 500 (if DB constraint fires)
-        $this->assertResponseStatusCodeSame(500);
+        $this->assertResponseStatusCodeSame(201);
+        $data = $response->toArray();
+        $this->assertFalse($data['vote']);
+        $this->assertSame('20.00', $data['weight']);
     }
 
     public function testNonMemberCannotVote(): void
@@ -178,11 +182,7 @@ class SurveyVoteTest extends ApiTestCase
         $this->createMembership($admin, $org, 'ROLE_ADMIN');
 
         $em = $this->getEntityManager();
-        $survey = new Survey();
-        $survey->setTitle('Non-member Survey');
-        $survey->setOrganization($org);
-        $survey->setCreatedBy($admin);
-        $em->persist($survey);
+        $survey = $this->createSurveyEntity($org, $admin, ['title' => 'Non-member Survey']);
 
         $question = new SurveyQuestion();
         $question->setSurvey($survey);
@@ -190,7 +190,6 @@ class SurveyVoteTest extends ApiTestCase
         $em->persist($question);
         $em->flush();
 
-        // outsider has no membership and no resident link
         $client = $this->createOrgClient('vnon_outsider@test.com', $org->getId());
         $client->request('POST', '/api/survey_votes', [
             'json' => [
@@ -211,11 +210,7 @@ class SurveyVoteTest extends ApiTestCase
         $this->createMembership($member, $org, 'ROLE_MANAGER');
 
         $em = $this->getEntityManager();
-        $survey = new Survey();
-        $survey->setTitle('Membership Vote Survey');
-        $survey->setOrganization($org);
-        $survey->setCreatedBy($admin);
-        $em->persist($survey);
+        $survey = $this->createSurveyEntity($org, $admin, ['title' => 'Membership Vote Survey']);
 
         $question = new SurveyQuestion();
         $question->setSurvey($survey);
@@ -223,7 +218,6 @@ class SurveyVoteTest extends ApiTestCase
         $em->persist($question);
         $em->flush();
 
-        // Member with membership (not resident) can vote, weight is 0
         $client = $this->createOrgClient('vmem_member@test.com', $org->getId());
         $response = $client->request('POST', '/api/survey_votes', [
             'json' => [
@@ -245,21 +239,13 @@ class SurveyVoteTest extends ApiTestCase
         $building = $this->createBuilding($org);
         $this->createMembership($admin, $org, 'ROLE_ADMIN');
 
-        // Voter owns apartment (50m2) and parking (15m2)
         $apt = $this->createApartment($building, '1', '50.00', 'apartment');
         $this->createResident($apt, 'Voter', 'Apt', '50.00', $voter);
         $parking = $this->createApartment($building, 'P1', '15.00', 'parking');
         $this->createResident($parking, 'Voter', 'Park', '15.00', $voter);
 
         $em = $this->getEntityManager();
-
-        // Create parking-scoped survey
-        $survey = new Survey();
-        $survey->setTitle('Parking Survey');
-        $survey->setOrganization($org);
-        $survey->setCreatedBy($admin);
-        $survey->setPropertyType('parking');
-        $em->persist($survey);
+        $survey = $this->createSurveyEntity($org, $admin, ['title' => 'Parking Survey', 'propertyType' => 'parking']);
 
         $question = new SurveyQuestion();
         $question->setSurvey($survey);
@@ -277,7 +263,6 @@ class SurveyVoteTest extends ApiTestCase
 
         $this->assertResponseStatusCodeSame(201);
         $data = $response->toArray();
-        // Weight should only include parking area (15.00), not apartment area
         $this->assertSame('15.00', $data['weight']);
     }
 
@@ -289,19 +274,11 @@ class SurveyVoteTest extends ApiTestCase
         $building = $this->createBuilding($org);
         $this->createMembership($admin, $org, 'ROLE_ADMIN');
 
-        // User only owns apartment, no parking
         $apt = $this->createApartment($building, '1', '50.00', 'apartment');
         $this->createResident($apt, 'Apt', 'Owner', '50.00', $aptOwner);
 
         $em = $this->getEntityManager();
-
-        // Create parking-scoped survey
-        $survey = new Survey();
-        $survey->setTitle('Parking Only Survey');
-        $survey->setOrganization($org);
-        $survey->setCreatedBy($admin);
-        $survey->setPropertyType('parking');
-        $em->persist($survey);
+        $survey = $this->createSurveyEntity($org, $admin, ['title' => 'Parking Only Survey', 'propertyType' => 'parking']);
 
         $question = new SurveyQuestion();
         $question->setSurvey($survey);
@@ -309,7 +286,6 @@ class SurveyVoteTest extends ApiTestCase
         $em->persist($question);
         $em->flush();
 
-        // Apartment-only owner should be denied from parking survey
         $client = $this->createOrgClient('vptblock_aptowner@test.com', $org->getId());
         $client->request('POST', '/api/survey_votes', [
             'json' => [
@@ -332,11 +308,81 @@ class SurveyVoteTest extends ApiTestCase
             'json' => [
                 'title' => 'Auto Created By',
                 'organization' => '/api/organizations/' . $org->getId(),
+                'startDate' => '2026-01-01T00:00:00+00:00',
+                'endDate' => '2026-12-31T23:59:59+00:00',
             ],
         ]);
 
         $this->assertResponseStatusCodeSame(201);
         $data = $response->toArray();
         $this->assertRelationHasId($data['createdBy'], $admin->getId(), '/api/users/');
+    }
+
+    public function testCannotVoteBeforeStartDate(): void
+    {
+        $admin = $this->createUser('vbefore_admin@test.com');
+        $voter = $this->createUser('vbefore_voter@test.com');
+        [$org, $building, $apartment] = $this->createOrgStructure();
+        $this->createMembership($admin, $org, 'ROLE_ADMIN');
+        $this->createResident($apartment, 'Before', 'Voter', '30.00', $voter);
+
+        $em = $this->getEntityManager();
+        $survey = new Survey();
+        $survey->setTitle('Future Survey');
+        $survey->setOrganization($org);
+        $survey->setCreatedBy($admin);
+        $survey->setStartDate(new \DateTimeImmutable('+10 days'));
+        $survey->setEndDate(new \DateTimeImmutable('+40 days'));
+        $em->persist($survey);
+
+        $question = new SurveyQuestion();
+        $question->setSurvey($survey);
+        $question->setQuestionText('Too early?');
+        $em->persist($question);
+        $em->flush();
+
+        $client = $this->createOrgClient('vbefore_voter@test.com', $org->getId());
+        $client->request('POST', '/api/survey_votes', [
+            'json' => [
+                'question' => '/api/survey_questions/' . $question->getId(),
+                'vote' => true,
+            ],
+        ]);
+
+        $this->assertResponseStatusCodeSame(403);
+    }
+
+    public function testCannotVoteAfterEndDate(): void
+    {
+        $admin = $this->createUser('vafter_admin@test.com');
+        $voter = $this->createUser('vafter_voter@test.com');
+        [$org, $building, $apartment] = $this->createOrgStructure();
+        $this->createMembership($admin, $org, 'ROLE_ADMIN');
+        $this->createResident($apartment, 'After', 'Voter', '30.00', $voter);
+
+        $em = $this->getEntityManager();
+        $survey = new Survey();
+        $survey->setTitle('Expired Survey');
+        $survey->setOrganization($org);
+        $survey->setCreatedBy($admin);
+        $survey->setStartDate(new \DateTimeImmutable('-40 days'));
+        $survey->setEndDate(new \DateTimeImmutable('-1 day'));
+        $em->persist($survey);
+
+        $question = new SurveyQuestion();
+        $question->setSurvey($survey);
+        $question->setQuestionText('Too late?');
+        $em->persist($question);
+        $em->flush();
+
+        $client = $this->createOrgClient('vafter_voter@test.com', $org->getId());
+        $client->request('POST', '/api/survey_votes', [
+            'json' => [
+                'question' => '/api/survey_questions/' . $question->getId(),
+                'vote' => true,
+            ],
+        ]);
+
+        $this->assertResponseStatusCodeSame(403);
     }
 }

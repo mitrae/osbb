@@ -20,7 +20,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ORM\Entity]
 #[ORM\UniqueConstraint(name: 'unique_building_number_type', columns: ['building_id', 'number', 'type'])]
 #[UniqueEntity(fields: ['building', 'number', 'type'], message: 'Unit number already exists in this building for this type.')]
-#[ApiFilter(SearchFilter::class, properties: ['type' => 'exact'])]
+#[ApiFilter(SearchFilter::class, properties: ['type' => 'exact', 'building' => 'exact', 'number' => 'partial'])]
 #[ApiResource(
     operations: [
         new GetCollection(security: "is_granted('ROLE_USER')"),
